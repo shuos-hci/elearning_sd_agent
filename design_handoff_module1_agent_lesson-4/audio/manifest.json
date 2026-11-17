@@ -1,0 +1,404 @@
+{
+ "scene1-seg1": {
+  "duration": 7.059,
+  "parts": [
+   0.0
+  ],
+  "text": "Have you ever given AI a task, revised the prompt again and again, and somehow ended up further away from what you wanted?"
+ },
+ "scene1-seg2": {
+  "duration": 1.382,
+  "parts": [
+   0.0
+  ],
+  "text": "The colors changed."
+ },
+ "scene1-seg3": {
+  "duration": 1.254,
+  "parts": [
+   0.0
+  ],
+  "text": "The audience shifted."
+ },
+ "scene1-seg4": {
+  "duration": 3.042,
+  "parts": [
+   0.0
+  ],
+  "text": "The result no longer felt aligned with the original goal."
+ },
+ "scene1-seg5": {
+  "duration": 4.412,
+  "parts": [
+   0.0
+  ],
+  "text": "You added more instructions, but each correction seemed to create another problem."
+ },
+ "scene1-seg6": {
+  "duration": 2.923,
+  "parts": [
+   0.0
+  ],
+  "text": "What if the problem is not simply the prompt?"
+ },
+ "scene1-seg7": {
+  "duration": 6.292,
+  "parts": [
+   0.0
+  ],
+  "text": "What if AI is making decisions it should not be making \u2014 or waiting for you to make decisions it could have handled?"
+ },
+ "scene1-seg8": {
+  "duration": 3.773,
+  "parts": [
+   0.0
+  ],
+  "text": "That question is at the center of building an effective AI agent."
+ },
+ "scene2-seg1": {
+  "duration": 16.351,
+  "parts": [
+   0.0,
+   2.55,
+   7.69,
+   10.438,
+   12.291,
+   14.261
+  ],
+  "text": "Welcome to Build Your First AI Agent. In this course, you will begin with a real work problem and move through four stages: deciding where an agent is appropriate, designing its architecture, building a minimum prototype, and evaluating how well it works."
+ },
+ "scene2-seg2": {
+  "duration": 4.04,
+  "parts": [
+   0.0
+  ],
+  "text": "We will begin with Unit 1: From Workflow to AI Approach."
+ },
+ "scene2-seg3": {
+  "duration": 7.023,
+  "parts": [
+   0.0
+  ],
+  "text": "Today, we will focus on Module 1: what distinguishes an AI agent from a single LLM call and a fixed workflow."
+ },
+ "scene2-seg4": {
+  "duration": 1.985,
+  "parts": [
+   0.0
+  ],
+  "text": "Let's begin with a quick decision."
+ },
+ "scene3-seg1": {
+  "duration": 5.526,
+  "parts": [
+   0.0
+  ],
+  "text": "Imagine that you need AI to help create promotional visuals for Campus Sustainability Week."
+ },
+ "scene3-seg2": {
+  "duration": 5.921,
+  "parts": [
+   0.0
+  ],
+  "text": "You can use the same underlying AI model in three different systems. Which would you choose?"
+ },
+ "scene3-seg3": {
+  "duration": 5.491,
+  "parts": [
+   0.0
+  ],
+  "text": "Choice saved. However, the deliverable alone does not tell us enough to choose a system."
+ },
+ "scene3-seg4": {
+  "duration": 3.553,
+  "parts": [
+   0.0
+  ],
+  "text": "To make a better decision, we need to look beneath the labels."
+ },
+ "scene4-seg1": {
+  "duration": 4.296,
+  "parts": [
+   0.0
+  ],
+  "text": "These systems are often presented as increasing levels of intelligence."
+ },
+ "scene4-seg2": {
+  "duration": 6.513,
+  "parts": [
+   0.0
+  ],
+  "text": "But that framing can be misleading. The staircase collapses, and the three options move onto the same level."
+ },
+ "scene4-seg3": {
+  "duration": 7.265,
+  "parts": [
+   0.0
+  ],
+  "text": "They are not simply three levels of AI. They are three ways of structuring how AI participates in work."
+ },
+ "scene4-seg4": {
+  "duration": 4.447,
+  "parts": [
+   0.0
+  ],
+  "text": "Let's begin with the form of AI assistance most people already use."
+ },
+ "scene5-seg1": {
+  "duration": 7.837,
+  "parts": [
+   0.0
+  ],
+  "text": "In a single LLM call, the user gives the model one bounded request, and the model produces one primary response."
+ },
+ "scene5-seg2": {
+  "duration": 4.919,
+  "parts": [
+   0.0,
+   2.225
+  ],
+  "text": "The model produces a response, but it does not manage a continuing process."
+ },
+ "scene5-seg3": {
+  "duration": 6.037,
+  "parts": [
+   0.0
+  ],
+  "text": "This may be enough for a focused task. But what if Maya repeats the same production process every week?"
+ },
+ "scene6-seg1": {
+  "duration": 7.023,
+  "parts": [
+   0.0
+  ],
+  "text": "Maya's poster needs to become three things: a large poster, a small social post, and an email banner."
+ },
+ "scene6-seg2": {
+  "duration": 2.159,
+  "parts": [
+   0.0
+  ],
+  "text": "The same four steps run for each one."
+ },
+ "scene6-seg3": {
+  "duration": 5.19,
+  "parts": [
+   0.0,
+   1.134,
+   2.593,
+   4.296
+  ],
+  "text": "Resize, check the dimensions, apply the naming rule, export."
+ },
+ "scene6-seg4": {
+  "duration": 6.176,
+  "parts": [
+   0.0
+  ],
+  "text": "The steps are fixed. The rules are fixed. The model does not decide anything while it runs."
+ },
+ "scene6-seg5": {
+  "duration": 7.743,
+  "parts": [
+   0.0
+  ],
+  "text": "What happens if the logo is missing? The workflow has no step for that. It stops, and a person has to step in."
+ },
+ "scene7-seg1": {
+  "duration": 6.408,
+  "parts": [
+   0.0
+  ],
+  "text": "Three designs, three questions. For each one, ask: who decides what happens next?"
+ },
+ "scene7-seg2": {
+  "duration": 4.249,
+  "parts": [
+   0.0
+  ],
+  "text": "Design A: the user writes the content and places every element."
+ },
+ "scene7-seg3": {
+  "duration": 4.005,
+  "parts": [
+   0.0
+  ],
+  "text": "Design B: a fixed set of rules places the elements."
+ },
+ "scene7-seg4": {
+  "duration": 4.167,
+  "parts": [
+   0.0
+  ],
+  "text": "Design C: the model decides the layout while it works."
+ },
+ "scene7-seg5": {
+  "duration": 4.318,
+  "parts": [
+   0.0
+  ],
+  "text": "Sort them \u2014 which is a single call, which is a workflow, which is an agent?"
+ },
+ "scene7-seg6": {
+  "duration": 9.334,
+  "parts": [
+   0.0
+  ],
+  "text": "Now Maya needs AI to review several designs. Each design may contain a different problem, and each problem may require a different action or tool."
+ },
+ "scene7-seg7": {
+  "duration": 6.153,
+  "parts": [
+   0.0
+  ],
+  "text": "Not reliably. The appropriate next action depends on what the system discovers in each case."
+ },
+ "scene7-seg8": {
+  "duration": 3.413,
+  "parts": [
+   0.0
+  ],
+  "text": "This is where agentic decision-making can create value."
+ },
+ "scene8-seg1": {
+  "duration": 1.846,
+  "parts": [
+   0.0
+  ],
+  "text": "Maya gives the system a goal."
+ },
+ "scene8-seg2": {
+  "duration": 6.401,
+  "parts": [
+   0.0,
+   2.353,
+   4.207
+  ],
+  "text": "She also provides the context, tools, criteria, and boundaries that the system may use."
+ },
+ "scene8-seg3": {
+  "duration": 8.649,
+  "parts": [
+   0.0
+  ],
+  "text": "Unlike the fixed workflow, Maya does not define every action in advance. The model must use the current situation to determine what to do next."
+ },
+ "scene8-seg4": {
+  "duration": 9.982,
+  "parts": [
+   0.0
+  ],
+  "text": "An AI agent is not simply a longer workflow. Its defining feature is that the model uses context to determine the next action during execution."
+ },
+ "scene8-seg5": {
+  "duration": 12.338,
+  "parts": [
+   0.0,
+   3.932
+  ],
+  "text": "Agentic decision-making does not mean unlimited autonomy. A well-designed agent operates within a defined goal, evaluation criteria, available tools, and human approval boundaries."
+ },
+ "scene9-seg1": {
+  "duration": 4.679,
+  "parts": [
+   0.0
+  ],
+  "text": "So how do you tell them apart? Ask who determines what happens next."
+ },
+ "scene9-seg2": {
+  "duration": 5.526,
+  "parts": [
+   0.0
+  ],
+  "text": "The number of prompts, the number of tools, the number of steps \u2014 none of those decide it."
+ },
+ "scene9-seg3": {
+  "duration": 3.75,
+  "parts": [
+   0.0
+  ],
+  "text": "A workflow can use five tools and still not be an agent."
+ },
+ "scene9-seg4": {
+  "duration": 2.229,
+  "parts": [
+   0.0
+  ],
+  "text": "And an agent can be just one loop."
+ },
+ "scene9-seg5": {
+  "duration": 4.491,
+  "parts": [
+   0.0
+  ],
+  "text": "The approach is decided by who decides, not by how much happens."
+ },
+ "scene10-seg1": {
+  "duration": 1.37,
+  "parts": [
+   0.0
+  ],
+  "text": "Now try it yourself."
+ },
+ "scene10-seg2": {
+  "duration": 3.344,
+  "parts": [
+   0.0
+  ],
+  "text": "Read the scenario and decide which approach fits best."
+ },
+ "scene11-seg1": {
+  "duration": 1.416,
+  "parts": [
+   0.0
+  ],
+  "text": "Now try it yourself."
+ },
+ "scene11-seg2": {
+  "duration": 3.413,
+  "parts": [
+   0.0
+  ],
+  "text": "Read the scenario and decide which approach fits best."
+ },
+ "scene12-seg1": {
+  "dynamic": true
+ },
+ "scene12-seg2": {
+  "duration": 4.934,
+  "parts": [
+   0.0
+  ],
+  "text": "But 'create a promotional visual' did not provide enough information to choose a system."
+ },
+ "scene12-seg3": {
+  "duration": 5.848,
+  "parts": [
+   0.0,
+   2.04
+  ],
+  "text": "The deliverable may look similar. What changes is how the work proceeds and where decisions occur."
+ },
+ "scene13-seg1": {
+  "duration": 3.634,
+  "parts": [
+   0.0
+  ],
+  "text": "You have now seen three ways AI can participate in work."
+ },
+ "scene13-seg2": {
+  "duration": 9.984,
+  "parts": [
+   0.0
+  ],
+  "text": "The purpose of this distinction is not to discourage you from building an agent. It is to help you design agency deliberately, where the work actually requires runtime decision-making."
+ },
+ "scene13-seg3": {
+  "duration": 12.86,
+  "parts": [
+   0.0,
+   7.67
+  ],
+  "text": "Next, you will map a challenging workflow and identify where decisions, predictability, and variability occur. Once you know where the decisions are, you can determine what your agent should actually do."
+ }
+}

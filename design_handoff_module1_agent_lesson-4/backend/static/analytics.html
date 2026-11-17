@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Analytics — WASA-4 Module 1 (team only)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#F3F0E8; --card:#fff; --ink:#1C2130; --ink2:#5A606E; --line:#E2DDD1; --user:#2F64B8; --rules:#D6922A; --model:#A92E9C; --ok:#2E8A5C; --bad:#C2482F; --focus:#0E8A93; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); background:var(--bg); position:sticky; top:0; z-index:2; }
+  h1 { font-size:20px; margin:0; } h1 small { display:block; font-weight:500; font-size:13px; color:var(--ink2); }
+  main { max-width:1280px; margin:0 auto; padding:22px 28px 60px; display:grid; gap:18px; }
+  .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+  .kpi b { display:block; font-size:30px; letter-spacing:-.02em; } .kpi span { color:var(--ink2); font-size:13px; text-transform:uppercase; letter-spacing:.06em; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; } th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); } th { color:var(--ink2); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+  .btn { border:none; background:var(--ink); color:#fff; font-weight:700; font-size:15px; padding:0 18px; min-height:44px; border-radius:12px; cursor:pointer; }
+  .btn.ghost { background:transparent; color:var(--ink); border:1.5px solid #C8C2B4; }
+  .trends li { margin:4px 0; }
+  .gate { min-height:100vh; display:grid; place-items:center; padding:20px; }
+  .gate form { width:min(380px,100%); display:flex; flex-direction:column; gap:12px; }
+  .gate input { min-height:46px; border:1.5px solid #C8C2B4; border-radius:12px; padding:0 14px; font-size:16px; }
+  .err { color:var(--bad); font-size:14px; min-height:20px; }
+  .pill { display:inline-block; font-size:12px; padding:2px 8px; border-radius:99px; } .pill.ok { background:#E3F3EA; color:var(--ok); } .pill.no { background:#F7E7E2; color:var(--bad); }
+  canvas { max-height:280px; }
+  @media (max-width: 900px) { .kpis { grid-template-columns:repeat(2,1fr); } .grid2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div id="gate" class="gate">
+  <form class="card" id="gateForm" autocomplete="off">
+    <h1>Team analytics<small>WASA-4 · Build Your First AI Agent · Module 1</small></h1>
+    <label for="pw">Password</label>
+    <input id="pw" type="password" required autofocus />
+    <div class="err" id="err"></div>
+    <button class="btn" type="submit">Open dashboard</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <h1>Learning analytics<small>Module 1 · anonymous sessions only · <span id="stamp"></span></small></h1>
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" id="refresh" type="button">Refresh</button>
+      <button class="btn" id="export" type="button">Export Excel</button>
+    </div>
+  </header>
+  <main>
+    <section class="kpis">
+      <div class="card kpi"><span>Sessions</span><b id="k-sessions">–</b></div>
+      <div class="card kpi"><span>Completion rate</span><b id="k-rate">–</b></div>
+      <div class="card kpi"><span>Avg lesson time</span><b id="k-time">–</b></div>
+      <div class="card kpi"><span>Non-interactive clicks</span><b id="k-confuse">–</b></div>
+      <div class="card kpi"><span>Events</span><b id="k-events">–</b></div>
+    </section>
+    <section class="card"><h2>Trends to notice</h2><ul class="trends" id="trends"></ul></section>
+    <section class="grid2">
+      <div class="card"><h2>Average time per scene (seconds)</h2><canvas id="c-scene"></canvas></div>
+      <div class="card"><h2>Average attempts to get each question right</h2><canvas id="c-quiz"></canvas></div>
+    </section>
+    <section class="grid2">
+      <div class="card"><h2>Most-clicked buttons</h2><canvas id="c-buttons"></canvas></div>
+      <div class="card"><h2>Clicks on non-interactive areas — top targets (confusion signal)</h2><canvas id="c-confuse"></canvas></div>
+    </section>
+    <section class="card"><h2>Recent sessions</h2>
+      <table><thead><tr><th>Session</th><th>Started (UTC)</th><th>Status</th><th>Furthest scene</th><th>Minutes</th><th>Events</th></tr></thead><tbody id="recent"></tbody></table>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  var KEY = 'wasa4-dash-pw';
+  var pw = sessionStorage.getItem(KEY) || '';
+  var charts = {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  function api(path) {
+    return fetch(path, { headers: { 'X-Analytics-Password': pw } }).then(function (r) {
+      if (r.status === 401) throw new Error('Wrong password.');
+      if (r.status === 503) throw new Error('ANALYTICS_PASSWORD is not set on the server.');
+      if (!r.ok) throw new Error('Server error (' + r.status + ').');
+      return r;
+    });
+  }
+  function bar(id, labels, data, color, horizontal) {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart($(id), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ data: data, backgroundColor: color, borderRadius: 6 }] },
+      options: { indexAxis: horizontal ? 'y' : 'x', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false,
+                 scales: { x: { grid: { display: !horizontal } }, y: { grid: { display: horizontal ? false : true }, ticks: { autoSkip: false } } } },
+    });
+    $(id).parentElement.style.height = Math.max(240, horizontal ? labels.length * 28 + 60 : 280) + 'px';
+  }
+  function render(d) {
+    $('k-sessions').textContent = d.total_sessions;
+    $('k-rate').textContent = Math.round(d.completion_rate * 100) + '%';
+    $('k-time').textContent = d.avg_lesson_minutes != null ? d.avg_lesson_minutes + ' min' : '–';
+    $('k-confuse').textContent = d.noninteractive_clicks;
+    $('k-events').textContent = d.total_events;
+    $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString();
+    $('trends').innerHTML = (d.trends || []).map(function (t) { return '<li>' + t.replace(/</g, '&lt;') + '</li>'; }).join('');
+    bar('c-scene', d.avg_time_per_scene.map(function (r) { return r.scene + ' ' + r.name; }), d.avg_time_per_scene.map(function (r) { return r.avg_seconds; }), '#0E8A93');
+    bar('c-quiz', d.questions.map(function (r) { return r.question; }), d.questions.map(function (r) { return r.avg_attempts; }), '#A92E9C', true);
+    bar('c-buttons', d.top_buttons.map(function (r) { return r.target; }), d.top_buttons.map(function (r) { return r.clicks; }), '#2F64B8', true);
+    bar('c-confuse', d.top_noninteractive_targets.map(function (r) { return r.target; }), d.top_noninteractive_targets.map(function (r) { return r.clicks; }), '#D6922A', true);
+    $('recent').innerHTML = d.recent_sessions.map(function (r) {
+      return '<tr><td><code>' + r.session_id + '</code></td><td>' + r.started_at.replace('T', ' ') + '</td><td>' +
+        (r.completed ? '<span class="pill ok">completed</span>' : '<span class="pill no">in progress / left</span>') +
+        '</td><td>' + r.furthest_scene + '</td><td>' + r.minutes + '</td><td>' + r.events + '</td></tr>';
+    }).join('') || '<tr><td colspan="6">No sessions yet.</td></tr>';
+  }
+  function load() {
+    return api('/api/summary').then(function (r) { return r.json(); }).then(function (d) {
+      $('gate').hidden = true; $('app').hidden = false; render(d);
+    });
+  }
+  $('gateForm').addEventListener('submit', function (e) {
+    e.preventDefault(); pw = $('pw').value; $('err').textContent = '';
+    load().then(function () { sessionStorage.setItem(KEY, pw); }).catch(function (er) { $('err').textContent = er.message; });
+  });
+  $('refresh').addEventListener('click', function () { load().catch(function (er) { alert(er.message); }); });
+  $('export').addEventListener('click', function () {
+    api('/api/export.xlsx').then(function (r) {
+      var name = (r.headers.get('Content-Disposition') || '').split('filename="')[1]; name = name ? name.replace('"', '') : 'wasa4-analytics.xlsx';
+      return r.blob().then(function (b) { var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000); });
+    }).catch(function (er) { alert(er.message); });
+  });
+  if (pw) load().catch(function () { sessionStorage.removeItem(KEY); pw = ''; });
+})();
+</script>
+</body>
+</html>

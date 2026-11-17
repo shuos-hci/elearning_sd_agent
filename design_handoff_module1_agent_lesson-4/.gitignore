@@ -1,0 +1,27 @@
+# secrets — never commit
+.env
+*.env
+!.env.example
+
+# local data
+*.db
+*.sqlite
+*.sqlite3
+*.xlsx
+
+# build copies created by netlify.toml
+frontend/audio/
+frontend/assets/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# os / editors
+.DS_Store
+.vscode/
+.idea/
+
+local-build/node_modules/

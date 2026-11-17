@@ -1,0 +1,26 @@
+# Render Blueprint — deploys the analytics backend on the free tier.
+# In Render: New + → Blueprint → select this repo. Then set ANALYTICS_PASSWORD and ALLOWED_ORIGINS.
+services:
+  - type: web
+    name: wasa4-analytics
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ANALYTICS_PASSWORD
+        sync: false          # you type the value in the Render dashboard; never commit it
+      - key: ALLOWED_ORIGINS
+        sync: false          # e.g. https://your-site.netlify.app
+      # Optional: persistent data on Render's free PostgreSQL (see README).
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: wasa4-analytics-db
+      #     property: connectionString
+# databases:
+#   - name: wasa4-analytics-db
+#     plan: free

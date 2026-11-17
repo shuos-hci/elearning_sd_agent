@@ -1,0 +1,12 @@
+# Netlify: publish the static lesson from /frontend.
+# The narration (/audio) and teacher artwork (/assets/teacher) live at the repo root (as specified)
+# and are copied next to index.html at build time, so the page can load audio/... and assets/teacher/...
+[build]
+  base    = "."
+  publish = "frontend"
+  command = "rm -rf frontend/audio frontend/assets && cp -r audio frontend/audio && mkdir -p frontend/assets && cp -r assets/teacher frontend/assets/teacher"
+
+[[headers]]
+  for = "/audio/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
