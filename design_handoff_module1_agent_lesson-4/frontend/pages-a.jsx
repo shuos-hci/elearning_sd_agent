@@ -1,40 +1,86 @@
 /* Pages 1–4 (+ Matcher, shared by P4 and P7) */
 window.PAGES = window.PAGES || [];
 
-/* ---------- Matcher: tap a token, then tap a target (click-to-match, no drag needed) ---------- */
-function Matcher({ qid = 'match', tokens, targets, answers, state = {}, set, hint, layout = 'row', trayLabel = 'Tap an answer, then tap where it belongs', renderToken, renderTarget, trayHl, disabled }) {
+/* ---------- Matcher: drag an answer onto its place (or tap it, then tap the place) ----------
+   The tray order is shuffled so that no answer sits under the slot it belongs to (never "first to first"); a fresh shuffle each visit. */
+/* a shuffled copy that never keeps the original order (used for choices that have no fixed "right" position) */
+function shuffledNotSame(list) {
+  if (list.length < 2) return list;
+  for (let tries = 0; tries < 60; tries++) {
+    const o = list.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
+    if (o.some((x, i) => x !== list[i])) return o;
+  }
+  return list.slice().reverse();
+}
+function derangedOrder(tokens, targets, answers) {
+  const want = targets.map(t => answers[t.id]); // the token that belongs under each position
+  if (tokens.length < 2) return tokens;
+  for (let tries = 0; tries < 60; tries++) {
+    const o = tokens.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
+    if (o.every((tk, j) => tk.id !== want[j])) return o;
+  }
+  return tokens.map((_, j) => tokens.find(tk => tk.id === want[(j + 1) % want.length])); // rotated: also never aligned
+}
+function Matcher({ qid = 'match', tokens, targets, answers, state = {}, set, hint, layout = 'row', trayLabel = 'Drag an answer to where it belongs (or tap it, then tap the place)', renderToken, renderTarget, trayHl, disabled }) {
   const matched = state.matched || {};
   const [armed, setArmed] = useState(null);
   const [shake, setShake] = useState(null);
   const [bounce, setBounce] = useState(null);
+  const [dragId, setDragId] = useState(null);   // token currently being dragged
+  const [over, setOver] = useState(null);       // slot under the pointer while dragging
+  const order = useMemo(() => derangedOrder(tokens, targets, answers), []); // eslint-disable-line
+  const trayTokens = order.map(o => tokens.find(t => t.id === o.id) || o);
   const allDone = targets.every(t => matched[t.id]);
-  const place = (tid) => {
+  const place = (tid, tokenId = armed) => {
     if (matched[tid]) return;
-    if (!armed) { setShake(tid); setTimeout(() => setShake(null), 420); return; }
+    if (!tokenId) { setShake(tid); setTimeout(() => setShake(null), 420); return; }
     const n = (state.n || 0) + 1;
-    if (answers[tid] === armed) {
+    if (answers[tid] === tokenId) {
       FX.tap('ok');
-      quizAttempt(qid + ':' + tid, true, n, armed);
-      set({ matched: { ...matched, [tid]: armed }, hint: false, n });
+      quizAttempt(qid + ':' + tid, true, n, tokenId);
+      set({ matched: { ...matched, [tid]: tokenId }, hint: false, n });
       setArmed(null);
     } else {
       FX.tap('bad');
-      quizAttempt(qid + ':' + tid, false, n, armed);
-      setShake(tid); setBounce(armed); set({ hint: true, n }); setArmed(null);
+      quizAttempt(qid + ':' + tid, false, n, tokenId);
+      setShake(tid); setBounce(tokenId); set({ hint: true, n }); setArmed(null);
       setTimeout(() => { setShake(null); setBounce(null); }, 480);
     }
   };
+  // pointer drag (mouse, pen, touch). A press without movement stays a normal tap.
+  const latest = useRef(); latest.current = { place };
+  const drag = useRef(null), noClick = useRef(false);
+  const startDrag = (e, tk) => {
+    if (disabled || (e.button != null && e.button !== 0)) return;
+    const node = e.currentTarget, x0 = e.clientX, y0 = e.clientY; let ghost = null, active = false;
+    const slotAt = (x, y) => { const el = document.elementFromPoint(x, y); const s = el && el.closest('[data-slot]'); return s ? s.getAttribute('data-slot') : null; };
+    const move = (ev) => {
+      if (!active) { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 7) return; active = true; setDragId(tk.id); setArmed(null);
+        const r = node.getBoundingClientRect(); ghost = node.cloneNode(true); ghost.classList.add('drag-ghost'); ghost.removeAttribute('disabled'); ghost.style.width = r.width + 'px'; ghost.style.height = r.height + 'px'; document.body.appendChild(ghost); }
+      ghost.style.transform = `translate(${ev.clientX - 24}px, ${ev.clientY - 22}px) rotate(-2deg)`; setOver(slotAt(ev.clientX, ev.clientY));
+    };
+    const end = (ev) => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      if (!active) return;
+      noClick.current = true; setTimeout(() => { noClick.current = false; }, 80);
+      const tid = ev.type === 'pointerup' ? slotAt(ev.clientX, ev.clientY) : null;
+      if (ghost) ghost.remove(); setDragId(null); setOver(null);
+      if (tid) latest.current.place(tid, tk.id);
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+  };
   const used = Object.values(matched);
-  return { allDone, armed, matched, ui: {
+  return { allDone, armed, matched, order: trayTokens.map(t => t.id), ui: {
     tray: (
       <div className="mtray" data-hl={trayHl}>
-        <div className="q-head"><span className="label-mono">{trayLabel}</span><FF>{armed ? 'Now tap a slot' : 'Tap to pick up'}</FF></div>
+        <div className="q-head"><span className="label-mono">{trayLabel}</span><FF>{armed ? 'Now tap a slot' : 'Drag or tap'}</FF></div>
         <div className="tray" role="group" aria-label="Answers">
-          {tokens.map(tk => {
+          {trayTokens.map(tk => {
             const isUsed = used.includes(tk.id);
             return (
-              <button key={tk.id} type="button" className={`tray-badge tap ${bounce === tk.id ? 'is-bounce' : ''} ${armed === tk.id ? 'is-armed' : ''}`} disabled={isUsed || disabled} aria-pressed={armed === tk.id}
-                onClick={() => { FX.tap(); setArmed(armed === tk.id ? null : tk.id); }}>
+              <button key={tk.id} type="button" data-token={tk.id} className={`tray-badge tap ${bounce === tk.id ? 'is-bounce' : ''} ${armed === tk.id ? 'is-armed' : ''} ${dragId === tk.id ? 'is-dragging' : ''}`} disabled={isUsed || disabled} aria-pressed={armed === tk.id}
+                onPointerDown={(e) => startDrag(e, tk)}
+                onClick={() => { if (noClick.current) return; FX.tap(); setArmed(armed === tk.id ? null : tk.id); }}>
                 {renderToken(tk, isUsed)}
                 {isUsed && <span className="sr-only">(placed)</span>}
               </button>
@@ -44,13 +90,13 @@ function Matcher({ qid = 'match', tokens, targets, answers, state = {}, set, hin
       </div>
     ),
     slot: (tid) => (
-      <button type="button" className={`mslot ${matched[tid] ? 'is-filled' : 'tap'} ${armed && !matched[tid] ? 'is-armed' : ''} ${shake === tid ? 'is-shake' : ''}`}
+      <button type="button" data-slot={tid} className={`mslot ${matched[tid] ? 'is-filled' : 'tap'} ${(armed || dragId) && !matched[tid] ? 'is-armed' : ''} ${over === tid && !matched[tid] ? 'is-over' : ''} ${shake === tid ? 'is-shake' : ''}`}
         disabled={disabled}
         aria-label={matched[tid] ? `Matched: ${tokens.find(t => t.id === matched[tid]).label}, correct` : 'Place the selected answer here'}
         onClick={() => place(tid)}>
         {matched[tid]
           ? <>{renderToken(tokens.find(t => t.id === matched[tid]), false, true)}<span className="mslot-ok"><Icon name="check" size={18} sw={2.8} /></span></>
-          : <span className="mslot-empty">{armed ? 'Place here' : 'Empty slot'}</span>}
+          : <span className="mslot-empty">{armed || dragId ? 'Place here' : 'Empty slot'}</span>}
       </button>
     ),
     feedback: (
@@ -98,6 +144,8 @@ function Page1({ beat }) {
 }
 PAGES.push({
   id: 'p1', phase: 0, title: 'The Misalignment Spiral',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 0], main: 'spiral' }, { s: [1, 3], main: 'spiral' }, { s: [4, 4], main: 'prompts' }, { s: [5, 7], main: 'bigq' }],
   narration: () => [
     { t: 'Have you ever given AI a task, revised the prompt again and again, and somehow ended up further away from what you wanted?', hl: 'spiral' },
     { t: 'The colors changed.', hl: 'f1' },
@@ -148,6 +196,8 @@ function Page2({ beat }) {
 }
 PAGES.push({
   id: 'p2', phase: 0, title: 'Course and Module Orientation',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 0], main: 'coursemap' }, { s: [1, 2], main: 'unitmap' }, { s: [3, 3], main: 'next' }],
   narration: () => [
     { parts: [
       { t: 'In this course, you will begin with a real work problem and move through four stages:', hl: 'coursemap' }, // the page title is revealed with this part (data-hlr below)
@@ -170,6 +220,10 @@ const P3_OPTIONS = [
   { id: 'workflow', title: 'Fixed Workflow', desc: 'Run the work through a predefined sequence.' },
   { id: 'agent', title: 'AI Agent', desc: 'Give the system a goal and allow it to determine how to proceed.' },
 ];
+const P3_FEEDBACK = [ // spoken/shown after the learner saves a choice (derived from page state → also restored with saved progress)
+  { t: 'Choice saved. However, the deliverable alone does not tell us enough to choose a system.', hl: 'p3fb', fb: true },
+  { t: 'To make a better decision, we need to look beneath the labels.', hl: 'next', fb: true },
+];
 const P3_CHIPS = ['It seems simplest', 'It handles repetition', 'It can adapt to new problems'];
 const cleanExplanation = (t) => t.replace(/\s+and\s*$/i, '').trim();
 function Page3({ st, set, say }) {
@@ -179,6 +233,8 @@ function Page3({ st, set, say }) {
   const saved = st.saved;
   const [err, setErr] = useState(false);
   const taRef = useRef(null);
+  const optOrder = useMemo(() => shuffledNotSame(P3_OPTIONS), []);   // the systems and the reasons appear in a different order each visit
+  const chipOrder = useMemo(() => shuffledNotSame(P3_CHIPS), []);
   const clean = cleanExplanation(text);
   const dirty = saved && (saved.choice !== choice || saved.text !== clean);
   const pickChip = (c) => {
@@ -192,10 +248,7 @@ function Page3({ st, set, say }) {
     FX.tap('ok');
     setErr(false);
     set({ saved: { choice, chip, text: clean }, text: clean });
-    if (!saved) say([
-      { t: 'Choice saved. However, the deliverable alone does not tell us enough to choose a system.', hl: 'p3fb' },
-      { t: 'To make a better decision, we need to look beneath the labels.', hl: 'next' },
-    ]);
+    // the feedback paragraph ('Choice saved…') now appears by itself once this record exists (see P3_FEEDBACK / narration below)
   };
   return (
     <div className="page" data-screen-label="03 Initial Choice">
@@ -210,7 +263,7 @@ function Page3({ st, set, say }) {
         <div data-hl="options">
           <div className="q-head" style={{ marginBottom: 10 }}><span className="label-mono">Choose one system</span><FF /></div>
           <div className="optcards" role="radiogroup" aria-label="Choose a system">
-            {P3_OPTIONS.map(o => (
+            {optOrder.map(o => (
               <button key={o.id} type="button" role="radio" className={'optcard tap ' + (choice === o.id ? 'is-sel' : '')} aria-checked={choice === o.id}
                 onClick={() => { FX.tap(); set({ choice: o.id }); setErr(false); }}>
                 <span className="amark"><Icon name={APPROACHES[o.id].icon} size={22} /></span>
@@ -228,7 +281,7 @@ function Page3({ st, set, say }) {
           </div>
           <div className="p3-row">
             <div className="chips" role="group" aria-label="Quick reasons">
-              {P3_CHIPS.map(c => (
+              {chipOrder.map(c => (
                 <button key={c} type="button" className="chip tap" aria-pressed={chip === c && text.startsWith(c)} disabled={!choice} onClick={() => pickChip(c)}>{c}</button>
               ))}
             </div>
@@ -260,9 +313,12 @@ function Page3({ st, set, say }) {
 }
 PAGES.push({
   id: 'p3', phase: 0, title: 'Initial Choice',
-  narration: () => [
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 0], main: 'brief' }, { s: [1, 1], main: 'options' }],
+  narration: (all) => [
     { t: 'Imagine that you need AI to help create promotional visuals for Campus Sustainability Week.', hl: 'brief' },
     { t: 'You can use the same underlying AI model in three different systems. Which would you choose?', hl: 'options' },
+    ...(all && all.p3 && all.p3.saved ? P3_FEEDBACK : []),
   ],
   isComplete: (st) => !!st.saved,
   lockHint: 'Choose an option and save your explanation',
@@ -283,7 +339,7 @@ function Page4({ st, set, beat }) {
   const m = useMatcher({
     qid: 'p4-match', tokens: P4_TOKENS, targets: P4_APPROACHES.map(id => ({ id })), answers: P4_ANSWERS, state: st, set,
     hint: 'Think about who decides the next step in each system.', trayHl: 'badges', disabled: !collapsed,
-    trayLabel: 'Predict: tap an answer, then tap the approach it belongs to',
+    trayLabel: 'Predict: drag an answer onto the approach it belongs to (or tap it, then tap the approach)',
     renderToken: (tk, used, placed) => <DeciderBadge who={tk.id} label={tk.label} size={placed ? 'sm' : 'lg'} />,
   });
   const lvl = ['Simple', '', 'Advanced'];
@@ -317,6 +373,8 @@ function Page4({ st, set, beat }) {
 }
 PAGES.push({
   id: 'p4', phase: 1, title: 'The Central Distinction',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'stairs' }, { s: [2, 2], main: 'badges' }, { s: [3, 3], main: 'next' }],
   narration: () => [
     { t: 'These systems are often presented as increasing levels of intelligence.', hl: 'stairs' },
     { t: 'But that framing can be misleading. The staircase collapses, and the three options move onto the same level.', hl: 'stairs' },

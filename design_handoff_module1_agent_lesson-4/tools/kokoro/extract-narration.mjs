@@ -27,16 +27,18 @@ PAGES.forEach((pg, i) => {
   const segs = pg.narration({});
   segs.forEach((s, k) => { if (s.dyn) return; add(`scene${i + 1}-seg${k + 1}`, partsOf(s)); });
 });
-// appended feedback segments (say([...]) in pages-a / pages-b), numbered after the page's initial segments
-const sayBlocks = { 3: 'pages-a', 7: 'pages-b' };
-for (const [scene, file] of Object.entries(sayBlocks)) {
-  const src = fs.readFileSync(path.join(fe, file + '.jsx'), 'utf8');
-  const m = [...src.matchAll(/say\(\[([\s\S]*?)\]\)/g)].map(x => x[1]);
-  const block = m.find(b => (scene === '3' ? /Choice saved/ : /Not reliably/).test(b));
-  const segs = vm.runInContext('[' + block + ']', ctx);
-  const base = PAGES[scene - 1].narration({}).length;
-  segs.forEach((s, k) => add(`scene${scene}-seg${base + k + 1}`, partsOf(s)));
-}
+// feedback segments (derived from page state: Page 3 once a choice is saved, Page 7 once the question is solved), numbered after the base segments
+const FULL = { p3: { saved: { choice: 'agent', text: 'x' } }, p7: { q: { solved: true } } };
+PAGES.forEach((pg, i) => {
+  const base = pg.narration({}).length, full = pg.narration(FULL);
+  full.slice(base).forEach((s, k) => { if (!s.fb) throw new Error(`page ${i + 1}: extra segment ${base + k} is not flagged fb`); add(`scene${i + 1}-seg${base + k + 1}`, partsOf(s)); });
+});
+// paragraph definitions: every page's `paras` must partition its base segments contiguously, in order
+PAGES.forEach((pg, i) => {
+  const base = pg.narration({}).length; let next = 0;
+  (pg.paras || []).forEach((p, k) => { if (p.s[0] !== next || p.s[1] < p.s[0]) throw new Error(`page ${i + 1} paragraph ${k}: expected to start at segment ${next}, got ${p.s}`); next = p.s[1] + 1; if (!p.main) throw new Error(`page ${i + 1} paragraph ${k}: no main target`); });
+  if (next !== base) throw new Error(`page ${i + 1}: paragraphs cover ${next} of ${base} segments`);
+});
 // page 12, segment 1 (dynamic): pre-render the finite variants — 3 approaches × 3 preset reasons, plus "no saved choice"
 const p12 = PAGES[11];
 const none = p12.narration({})[0]; add(none.audio, [none.t], { variant: true });

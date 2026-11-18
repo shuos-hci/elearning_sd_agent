@@ -80,6 +80,8 @@ function Page9({ st, set, beat }) {
 }
 PAGES.push({
   id: 'p9', phase: 2, title: 'Compare the Three Systems',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'deciders' }, { s: [2, 3], main: 'row-workflow' }, { s: [4, 4], main: 'howq' }],
   narration: () => [
     { t: 'So how do you tell them apart? Ask who determines what happens next.', hl: 'deciders', key: true },
     { t: 'The number of prompts, the number of tools, the number of steps — none of those decide it.', hl: 'crossed' },
@@ -171,6 +173,8 @@ function Page10({ st, set }) {
 }
 PAGES.push({
   id: 'p10', phase: 3, title: 'Practice 1: Shopping App Product Photos',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'scenario' }],
   narration: () => [
     { t: 'Now try it yourself.', hl: 'scenario' },
     { t: 'Read the scenario and decide which approach fits best.', hl: 'questions' },
@@ -290,6 +294,8 @@ function Page11({ st, set }) {
 }
 PAGES.push({
   id: 'p11', phase: 3, title: 'Practice 2: Presentation Slide Designer',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'scenario' }],
   narration: () => [
     { t: 'Now try it yourself.', hl: 'scenario' },
     { t: 'Read the scenario and decide which approach fits best.', hl: 'questions' },
@@ -409,6 +415,8 @@ function Page12({ st, set, all }) {
 }
 PAGES.push({
   id: 'p12', phase: 4, title: 'Return to the Opening Decision',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'mychoice' }, { s: [2, 2], main: 'branches' }],
   narration: (all) => {
     const s = all.p3 && all.p3.saved;
     const first = s
@@ -498,6 +506,8 @@ function Page13({ st, set }) {
 }
 PAGES.push({
   id: 'p13', phase: 4, title: 'Summary and Transition',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'sum3' }, { s: [2, 2], main: 'unitmap' }],
   narration: () => [
     { t: 'You have now seen three ways AI can participate in work.', hl: 'sum3' },
     { t: 'The purpose of this distinction is not to discourage you from building an agent. It is to help you design agency deliberately, where the work actually requires runtime decision-making.', hl: 'core', key: true },

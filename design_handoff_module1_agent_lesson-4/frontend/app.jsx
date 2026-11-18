@@ -11,7 +11,7 @@ function loadSaved() {
     const raw = JSON.parse(localStorage.getItem(LS_KEY));
     const obj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
     if (!obj(raw) || !Number.isInteger(raw.idx) || raw.idx < 0 || raw.idx >= PAGES.length || !obj(raw.state) || !obj(raw.seen) || !obj(raw.maxSeg)) return null;
-    return { idx: raw.idx, state: raw.state, seen: raw.seen, maxSeg: raw.maxSeg };
+    return { idx: raw.idx, state: raw.state, seen: raw.seen, maxSeg: raw.maxSeg, para: obj(raw.para) ? raw.para : {}, rev: obj(raw.rev) ? raw.rev : {} }; // para = current explanation paragraph per page, rev = revealed-through segment per page
   } catch (e) { return null; }
 }
 /* "Continue" is offered only when the record shows real progress: a later page, any answer, a visited page (even page 1) or narration progress.
@@ -57,8 +57,70 @@ function useFitToStage(stageRef, fitRef, innerRef, key) {
   }, [key]);
 }
 
+/* ---------- Learning mode + caption preference (remembered across visits) ---------- */
+const PREF_KEY = 'bya-m1-prefs'; // { mode: 'narration' | 'caption', cc: boolean }  — CC defaults to on, then remembers the learner's choice
+function loadPrefs() { try { const p = JSON.parse(localStorage.getItem(PREF_KEY)); return { mode: p && p.mode === 'caption' ? 'caption' : 'narration', cc: p && typeof p.cc === 'boolean' ? p.cc : true }; } catch (e) { return { mode: 'narration', cc: true }; } }
+function savePrefs(p) { try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...loadPrefs(), ...p })); } catch (e) {} }
+
+/* ---------- Explanation paragraphs ----------
+   page.paras groups the page's narration segments (contiguous index ranges, by meaning) and names each paragraph's main target.
+   Segments flagged `fb` (feedback derived from page state) are appended as their own paragraph. Both modes use these boundaries. */
+const segKey = (s) => s.hl || (s.parts && s.parts[0] && s.parts[0].hl) || null;
+const segText = (s) => (s.parts ? s.parts.map(p => p.t).join(' ') : s.t);
+function buildParas(page, segs) {
+  const base = segs.filter(s => !s.fb).length;
+  const out = (page.paras && page.paras.length ? page.paras.map(p => ({ first: p.s[0], last: p.s[1], main: p.main })) : segs.slice(0, base).map((s, i) => ({ first: i, last: i, main: segKey(s) })));
+  for (let i = base; i < segs.length;) { let j = i; while (j + 1 < segs.length && segs[j + 1].fb) j++; out.push({ first: i, last: j, main: segKey(segs[i]), fb: true }); i = j + 1; }
+  return out.map(p => ({ ...p, text: segs.slice(p.first, p.last + 1).map(segText).join(' ') }));
+}
+
+/* ---------- Mode selector: [Narration] [Caption Only] ---------- */
+function ModeSwitch({ mode, onMode, className = '' }) {
+  const onKey = (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const next = mode === 'narration' ? 'caption' : 'narration'; onMode(next); const b = e.currentTarget.parentElement.querySelector(`[data-mode="${next}"]`); b && b.focus(); } };
+  return (
+    <div className={'modesw ' + className} role="group" aria-label="Learning mode">
+      {[['narration', 'Narration', 'vol'], ['caption', 'Caption Only', 'check']].map(([k, label]) => (
+        <button key={k} type="button" data-mode={k} className={'modesw-b' + (mode === k ? ' is-on' : '')} aria-pressed={mode === k} data-track={'mode-' + k}
+          onClick={() => onMode(k)} onKeyDown={onKey} title={k === 'narration' ? 'Milo explains aloud (captions optional)' : 'Silent: read each explanation'}>
+          {mode === k && <Icon name="check" size={14} sw={3} />}{label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- Explanation panel: one complete paragraph + paragraph controls (shared by both modes) ---------- */
+function ExplainPanel({ panelRef, mode, showText, texts, k, n, onBack, onNext, playing, onPlay, onPause, onReplay, blocked }) {
+  return (
+    <section className={'xpanel' + (showText ? '' : ' is-compact')} ref={panelRef} aria-label="Explanation">
+      {/* Captions off (Narration only): the text area is removed entirely; the panel shrinks to the paragraph + audio controls.
+          Captions on: every paragraph of the page is stacked in one grid cell (only the current one visible) so the panel keeps the height
+          of the tallest one while moving between paragraphs. */}
+      {showText && (
+        <div className="xp-text" aria-live="polite">
+          {texts.map((t, i) => <p key={i} className={i === k ? '' : 'xp-ghost'} aria-hidden={i === k ? undefined : 'true'}>{t}</p>)}
+        </div>
+      )}
+      <div className="xp-ctl" role="group" aria-label="Explanation controls">
+        <div className="xp-nav">
+          <button type="button" className="xp-b tap" data-track="para-back" onClick={onBack} disabled={k <= 0}><Icon name="left" size={16} /> Back</button>
+          <span className="xp-count" aria-label={`Explanation ${k + 1} of ${n}`}>{k + 1} / {n}</span>
+          <button type="button" className="xp-b is-next tap" data-track="para-continue" onClick={onNext} disabled={k >= n - 1}>Continue <Icon name="right" size={16} /></button>
+        </div>
+        {mode === 'narration' && (
+          <div className="xp-audio">
+            <button type="button" className="xp-ic tap" data-track="narr-playpause" onClick={playing ? onPause : onPlay} aria-label={playing ? 'Pause narration' : 'Play this explanation'} title={playing ? 'Pause' : 'Play'}><Icon name={playing ? 'pause' : 'play'} size={18} /></button>
+            <button type="button" className="xp-ic tap" data-track="narr-replay" onClick={onReplay} aria-label="Replay this explanation from the start" title="Replay"><Icon name="replay" size={18} /></button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* ---------- Staged reveal (Fix 13): elements appear when their narration segment starts ---------- */
-function useStagedReveal(stageRef, map, seg, part, beat, ended, key) {
+function useStagedReveal(stageRef, map, seg, part, key) {
+  // seg/part = how far the lesson has been revealed: the live narration position, or "everything through segment N" (part = Infinity)
   useEffect(() => {
     const root = stageRef.current;
     if (!root) return;
@@ -73,7 +135,7 @@ function useStagedReveal(stageRef, map, seg, part, beat, ended, key) {
           return ca && (ca[0] < s || (ca[0] === s && ca[1] < p));
         });
         if (earlierChild) { el.classList.remove('stg', 'is-in'); el.removeAttribute('inert'); return; }
-        const shown = ended || beat > s || (seg > s) || (seg === s && part >= p);
+        const shown = seg > s || (seg === s && part >= p);
         el.classList.add('stg');
         el.classList.toggle('is-in', !!shown);
         if (shown) el.removeAttribute('inert'); else el.setAttribute('inert', '');
@@ -83,7 +145,7 @@ function useStagedReveal(stageRef, map, seg, part, beat, ended, key) {
     const mo = new MutationObserver(() => { mo.disconnect(); apply(); mo.observe(root, { childList: true, subtree: true }); });
     mo.observe(root, { childList: true, subtree: true });
     return () => mo.disconnect();
-  }, [map, seg, part, beat, ended, key]);
+  }, [map, seg, part, key]);
 }
 
 /* ---------- Milo (replaces the teacher): fixed reserved area bottom-left, above the caption strip / footer ----------
@@ -153,7 +215,7 @@ function FloatingCursor({ cue, hidden }) {
       document.querySelectorAll('.stage button, .stage input, .stage textarea, .bottombar button').forEach(e => { const q = R(e); if (q.w > 2 && !(tgt && tgt.contains(e))) text.push(q); });
       document.querySelectorAll('.stage svg:not(.mcursor-svg), .stage img').forEach(e => { // diagram graphics / icons are content too
         if (e.closest('.stg:not(.is-in), [inert], .milo, .mcursor') || (tgt && tgt.contains(e))) return; const q = R(e); if (q.w > 6 && q.h > 6) text.push(q); });
-      [['.caption-bar', 8], ['.topbar', 8], ['.bottombar', 8], ['.milo-guide', 10]].forEach(([sel, pad]) => { const e = document.querySelector(sel); if (e && !(tgt && (tgt.closest(sel) || e.contains(tgt)))) { const q = R(e); zones.push({ l: q.l - pad, t: q.t - pad, r: q.r + pad, b: q.b + pad }); } });
+      [['.xpanel', 8], ['.topbar', 8], ['.bottombar', 8], ['.milo-guide', 10]].forEach(([sel, pad]) => { const e = document.querySelector(sel); if (e && !(tgt && (tgt.closest(sel) || e.contains(tgt)))) { const q = R(e); zones.push({ l: q.l - pad, t: q.t - pad, r: q.r + pad, b: q.b + pad }); } });
       return { text, zones };
     };
     // the arrow's body box for a candidate at a given tip point (rotation about the tip)
@@ -230,13 +292,13 @@ function FloatingCursor({ cue, hidden }) {
 }
 
 /* ---------- Top-right toggles: sound (all narration audio) + CC ---------- */
-function CornerToggles({ audio, cc, onAudio, onCC, showCC = true }) {
+function CornerToggles({ audio, cc, onAudio, onCC, showCC = true, showSound = true }) {
   return (
     <div className="corner-tg" role="group" aria-label="Sound and captions">
-      <button type="button" className="ctg tap" aria-pressed={audio} onClick={onAudio} data-track="sound-toggle"
+      {showSound && <button type="button" className="ctg tap" aria-pressed={audio} onClick={onAudio} data-track="sound-toggle"
         aria-label={audio ? 'Sound on — turn all narration audio off' : 'Sound off — turn narration audio on'} title={audio ? 'Sound on' : 'Sound off'}>
         <Icon name={audio ? 'vol' : 'volOff'} size={19} />
-      </button>
+      </button>}
       {showCC && (
         <button type="button" className="ctg ctg-cc tap" aria-pressed={cc} onClick={onCC} data-track="cc-toggle"
           aria-label={cc ? 'Captions on — hide captions' : 'Captions off — show captions'} title={cc ? 'Captions on' : 'Captions off'}>
@@ -264,7 +326,7 @@ function Onboarding({ onDone }) {
   const steps = [
     'Listen to Milo — his cursor shows the part being explained.',
     'Answer by tapping an option — Next unlocks when you finish.',
-    'Use the icons at the top right for sound and captions.',
+    'Use Back and Continue under the lesson to move through each explanation. The switch at the top changes between Narration and Caption Only.',
   ];
   const finish = (how) => { FX.tap(); track('button_click', { target: 'onboarding-' + how, value: how }); onDone(); };
   return (
@@ -297,41 +359,59 @@ function Onboarding({ onDone }) {
 function App() {
   const saved = useMemo(loadSaved, []);
   const sess0 = useMemo(loadSess, []);
+  const prefs0 = useMemo(loadPrefs, []);
   const narrator = useMemo(() => createNarrator(), []);
   const [started, setStarted] = useState(false);
-  const [cue, setCue] = useState(null); // {id, el, rect, gesture}: the narrated target the cursor points at
-  const [answering, setAnswering] = useState(false); // the learner is answering → the cursor stays away until the narration reaches a new target
+  const [mode, setMode] = useState(prefs0.mode);             // 'narration' | 'caption' (remembered)
+  const modeRef = useRef(prefs0.mode); modeRef.current = mode;
+  const [cue, setCue] = useState(null); // {id, el, rect, gesture}: the target the teaching cursor points at
+  const [answering, setAnswering] = useState(false); // the learner is answering → the cursor stays away until the next target
+  const [hold, setHold] = useState(null); // Narration: the last narrated target stays indicated while the learner reads the finished paragraph
   const lastCenter = useRef(null);
   const [idx, setIdx] = useState(saved ? saved.idx || 0 : 0);
   const [state, setState] = useState(saved ? saved.state || {} : {});
   const [seen, setSeen] = useState(saved ? saved.seen || {} : {});
   const [maxSeg, setMaxSeg] = useState(saved ? saved.maxSeg || {} : {});
+  const [paraMap, setParaMap] = useState(saved ? saved.para || {} : {});  // current explanation paragraph per page
+  const [revMap, setRevMap] = useState(saved ? saved.rev || {} : {});     // content revealed through this segment, per page
   const [audio, setAudioS] = useState(sess0.audio !== false);
-  const [cc, setCC] = useState(!!sess0.cc);
+  const [cc, setCC] = useState(prefs0.cc);
   const [onb, setOnb] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const NS0 = { status: 'idle', seg: 0, part: 0, hl: null, segCount: 0, audio: true, caption: '', scene: 0 };
-  const ns0 = NS0;
   const [justUnlocked, setJustUnlocked] = useState(false);
-  const stageRef = useRef(null), fitRef = useRef(null), innerRef = useRef(null);
+  const stageRef = useRef(null), fitRef = useRef(null), innerRef = useRef(null), appRef = useRef(null), panelRef = useRef(null);
 
-  const [nsRaw, setNsRaw] = useState(ns0);
+  const [nsRaw, setNsRaw] = useState(NS0);
   useEffect(() => narrator.subscribe(setNsRaw), [narrator]);
-  useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify({ idx, state, seen, maxSeg })); }, [idx, state, seen, maxSeg]);
-  useEffect(() => { saveSess({ audio, cc }); FX.on = audio; narrator.setAudio(audio); }, [audio]);
-  useEffect(() => { saveSess({ cc }); }, [cc]);
+  useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify({ idx, state, seen, maxSeg, para: paraMap, rev: revMap })); }, [idx, state, seen, maxSeg, paraMap, revMap]);
+  // Sound (session) + mode: Caption Only switches the narrator off completely (no audio, no speech, no timers, no click tones)
+  useEffect(() => { saveSess({ audio }); FX.on = audio && mode === 'narration'; narrator.setEnabled(mode === 'narration'); narrator.setAudio(audio); }, [audio, mode]);
+  useEffect(() => { savePrefs({ cc }); }, [cc]);
 
   const page = PAGES[idx];
   const pst = state[page.id] || {};
-  // ignore narrator snapshots that still belong to the previous page
-  const ns = nsRaw.scene === idx + 1 ? nsRaw : { ...NS0, segCount: page.narration(state).length };
-  const complete = page.isComplete(pst, state, Math.max(maxSeg[page.id] || 0, ns.status === 'ended' ? 99 : ns.seg));
   const sceneNo = idx + 1;
+  const segs = useMemo(() => page.narration(state), [idx, state]);      // includes derived feedback segments (flagged fb)
+  const paras = useMemo(() => buildParas(page, segs), [idx, segs]);
+  const parasRef = useRef(paras); parasRef.current = paras;
+  const paraIdx = Math.max(0, Math.min(paras.length - 1, paraMap[page.id] || 0));
+  const para = paras[paraIdx];
+  // ignore narrator snapshots that still belong to the previous page
+  const ns = nsRaw.scene === sceneNo ? nsRaw : { ...NS0 };
+  const live = mode === 'narration' && (ns.status === 'playing' || ns.status === 'paused');
+  const playing = mode === 'narration' && ns.status === 'playing';
+  const rev = revMap[page.id] ?? -1;
+  // furthest reveal: live narration position, or everything through the last completed/skipped/entered paragraph
+  const posSeg = live && ns.seg > rev ? ns.seg : rev, posPart = live && ns.seg > rev ? (ns.part || 0) : Infinity;
+  const beat = Math.max(live ? ns.seg : -1, maxSeg[page.id] || 0, rev);
+  const complete = page.isComplete(pst, state, beat);
 
-  // staging map from the page's INITIAL narration (appended feedback segments are never staged)
+  // staging map from the page's base narration (derived feedback segments are never staged)
   const stageMap = useMemo(() => {
     const m = {};
-    page.narration(state).forEach((s, si) => {
+    segs.forEach((s, si) => {
+      if (s.fb) return;
       const parts = s.parts || [{ t: s.t, hl: s.hl }];
       parts.forEach((p, pi) => { const k = p.hl || s.hl; if (k && k !== 'next' && !(k in m)) m[k] = [si, pi]; });
     });
@@ -339,14 +419,36 @@ function App() {
     // eslint-disable-next-line
   }, [idx, started]);
 
-  const startNarration = useCallback(() => { narrator.load(page.narration(state), sceneNo); }, [idx, state]);
+  const markRevealed = (pid, L) => {
+    setRevMap(m => ((m[pid] ?? -1) >= L ? m : { ...m, [pid]: L }));
+    setMaxSeg(m => ((m[pid] || 0) >= L ? m : { ...m, [pid]: L }));
+  };
+  // enter a paragraph: everything before it is revealed; Caption Only reveals all of it at once, Narration plays it and reveals as it is spoken
+  const startPara = (P, k) => {
+    const p = P[k]; if (!p) return;
+    if (p.first > 0) markRevealed(page.id, p.first - 1);
+    setHold(null);
+    if (modeRef.current === 'caption') markRevealed(page.id, p.last);
+    else narrator.playRange(p.first, p.last);
+  };
+  const goPara = (k) => {
+    const P = parasRef.current; if (!P.length) return;
+    k = Math.max(0, Math.min(P.length - 1, k));
+    const cur = P[paraIdx]; if (cur) markRevealed(page.id, cur.last); // leaving a paragraph reveals whatever it still owed
+    narrator.stop();                                                   // stop audio, speech, mouth and pending callbacks first: never two voices
+    setParaMap(m => ({ ...m, [page.id]: k }));
+    startPara(P, k);
+  };
 
+  useEffect(() => { if (started) narrator.setSegs(segs); }, [segs, started]); // keeps the narrator's segment list current (feedback appears)
   useEffect(() => {
     if (!started) return;
     track('scene_enter', { scene: sceneNo });
     const t0 = Date.now();
-    if (page.id === 'p2' && !loadSess().onboarded) { narrator.stop(sceneNo); setOnb(true); }
-    else narrator.load(page.narration(state), sceneNo);
+    narrator.prepare(segs, sceneNo);
+    setHold(null);
+    if (page.id === 'p2' && !loadSess().onboarded) setOnb(true);
+    else startPara(paras, Math.max(0, Math.min(paras.length - 1, paraMap[page.id] || 0)));
     setSeen(s => ({ ...s, [page.id]: true }));
     if (stageRef.current) stageRef.current.scrollTop = 0;
     return () => track('scene_exit', { scene: sceneNo, value: Math.round((Date.now() - t0) / 1000) });
@@ -354,22 +456,37 @@ function App() {
   }, [idx, started]);
   useEffect(() => () => narrator.stop(), [narrator]);
 
-  useFitToStage(stageRef, fitRef, innerRef, started + ':' + idx + ':' + cc);
-
-  const ended = ns.status === 'ended';
-  const liveSeg = ended ? 99 : ns.seg;
-  const beat = Math.max(liveSeg, maxSeg[page.id] || 0);
+  // Narration: a paragraph that has finished playing is fully revealed and waits for Continue
+  const rangeDone = mode === 'narration' && ns.status === 'ended' && !onb;
+  useEffect(() => { if (started && rangeDone && para) markRevealed(page.id, para.last); /* eslint-disable-next-line */ }, [rangeDone]);
+  // a feedback paragraph appears after the learner answers → move to it (the learner caused it)
+  const prevLen = useRef({});
   useEffect(() => {
-    if (!started) return;
-    if (liveSeg > (maxSeg[page.id] || 0)) setMaxSeg(m => ({ ...m, [page.id]: liveSeg }));
+    if (!started || onb) return;
+    const pl = prevLen.current[page.id]; prevLen.current[page.id] = paras.length;
+    if (pl != null && paras.length > pl) goPara(paras.length - 1);
     // eslint-disable-next-line
-  }, [liveSeg, idx]);
-  const beatSaved = maxSeg[page.id] || 0;
-  useStagedReveal(stageRef, stageMap, onb ? -1 : ns.seg, ns.part || 0, onb ? -1 : beatSaved, ended && !onb, idx + ':' + started);
+  }, [paras.length, idx, started, onb]);
 
-  // the content the narration is talking about (replaces the old pointing hand): the floating cursor + Milo, see the cue effect below
-  const hlKey = started && !onb && (ns.status === 'playing' || ns.status === 'paused') ? ns.hl : null;
-  // one activation per target change (not per render / per word); never while the learner is typing an answer
+  useFitToStage(stageRef, fitRef, innerRef, started + ':' + idx + ':' + mode + ':' + cc);
+  useEffect(() => { // Milo / cursor / content keep clear of the explanation panel whatever its height
+    const app = appRef.current, p = panelRef.current; if (!app || !p) return;
+    const f = app.querySelector('.bottombar');
+    const set = () => { app.style.setProperty('--cc-h', Math.round(p.getBoundingClientRect().height) + 'px'); if (f) app.style.setProperty('--footer-h', Math.round(f.getBoundingClientRect().height) + 'px'); };
+    set(); const ro = new ResizeObserver(set); ro.observe(p); if (f) ro.observe(f); window.addEventListener('resize', set);
+    return () => { ro.disconnect(); window.removeEventListener('resize', set); };
+  }, [started, mode]);
+  useEffect(() => {
+    if (!started || !live) return;
+    if (ns.seg > (maxSeg[page.id] || 0)) setMaxSeg(m => ({ ...m, [page.id]: ns.seg }));
+    // eslint-disable-next-line
+  }, [ns.seg, live, idx]);
+  useStagedReveal(stageRef, stageMap, onb ? -1 : posSeg, onb ? 0 : posPart, idx + ':' + started);
+
+  // the target the teaching cursor indicates: Narration → what is being spoken (kept after the paragraph ends); Caption Only → the paragraph's main target
+  const liveHl = live ? ns.hl : null;
+  useEffect(() => { if (liveHl) setHold(liveHl); }, [liveHl]);
+  const hlKey = started && !onb ? (mode === 'caption' ? (para && para.main) || null : (liveHl || (rangeDone ? hold : null))) : null;
   const lastCueKey = useRef(null), cueSeq = useRef(0);
   const levelFn = useCallback(() => narrator.level(), [narrator]);
   useEffect(() => {
@@ -398,11 +515,11 @@ function App() {
     return () => { document.removeEventListener('pointerdown', on, true); document.removeEventListener('keydown', on, true); };
   }, [started]);
 
-  // Opening: as soon as the page is ready, try to play the welcome (the browser may refuse audible autoplay → narrator state 'blocked')
-  const introOver = useRef(false); // set by 'Skip intro' so a pending autoplay attempt can never start the welcome afterwards
+  // Opening: as soon as the page is ready, try to play the welcome (Narration only; the browser may refuse audible autoplay → 'blocked')
+  const introOver = useRef(false); // set by 'Skip intro' / switching to Caption Only so a pending autoplay attempt can never start the welcome
   useEffect(() => {
     if (started) return;
-    let t; const go = () => { t = setTimeout(() => { if (!introOver.current) narrator.load(WELCOME_SEGS, 0); }, 250); };
+    let t; const go = () => { t = setTimeout(() => { if (!introOver.current && modeRef.current === 'narration') narrator.load(WELCOME_SEGS, 0); }, 250); };
     if (document.readyState === 'complete') go(); else window.addEventListener('load', go, { once: true });
     return () => { clearTimeout(t); window.removeEventListener('load', go); };
   }, []);
@@ -425,7 +542,7 @@ function App() {
   const setPage = useCallback((patch) => {
     setState(s => ({ ...s, [page.id]: { ...(s[page.id] || {}), ...patch } }));
   }, [page.id]);
-  const say = useCallback((segs) => narrator.append(segs), [narrator]);
+  const say = useCallback(() => {}, []); // feedback is now derived from page state (see P3_FEEDBACK / P7_FEEDBACK)
 
   const go = (d) => {
     const n = idx + d;
@@ -435,21 +552,22 @@ function App() {
     setIdx(n);
   };
 
-  // tap a narrated (display) element → replay just its narration segment
+  // Narration: tap a narrated (display) element → play the explanation paragraph it belongs to
+  const paraOfKey = (key) => { const si = segs.findIndex(s => (s.parts ? s.parts.some(p => p.hl === key) : false) || s.hl === key); return si < 0 ? -1 : parasRef.current.findIndex(p => si >= p.first && si <= p.last); };
   const onStageClick = (e) => {
-    if (e.target.closest('button, a, input, textarea, label, [role="radio"], [role="checkbox"], .tap')) return;
+    if (mode !== 'narration' || e.target.closest('button, a, input, textarea, label, [role="radio"], [role="checkbox"], .tap')) return;
     const el = e.target.closest('[data-hl]');
     if (!el) return;
-    const seg = narrator.segOfHl(el.getAttribute('data-hl'));
-    if (seg >= 0) { FX.tap(); narrator.playSeg(seg); }
+    const pi = paraOfKey(el.getAttribute('data-hl'));
+    if (pi >= 0) { FX.tap(); goPara(pi); }
   };
   useEffect(() => {
     if (!started) return;
     const t = setTimeout(() => {
       document.querySelectorAll('.stage [data-hl]').forEach(el => {
-        const ok = narrator.segOfHl(el.getAttribute('data-hl')) >= 0 && !el.matches('button, .tap');
+        const ok = mode === 'narration' && paraOfKey(el.getAttribute('data-hl')) >= 0 && !el.matches('button, .tap');
         el.classList.toggle('narr-target', ok);
-        if (ok) el.setAttribute('title', 'Tap to replay this part of the narration');
+        if (ok) el.setAttribute('title', 'Tap to hear this explanation again'); else el.removeAttribute('title');
       });
     }, 50);
     return () => clearTimeout(t);
@@ -467,10 +585,23 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const toggleAudio = () => { const v = !audio; setAudioS(v); FX.on = v; if (v) FX.tap(); };
+  const toggleAudio = () => { const v = !audio; setAudioS(v); FX.on = v && mode === 'narration'; if (v) FX.tap(); };
   const toggleCC = () => { FX.tap(); setCC(!cc); };
+  // Mode switch (cover or lesson). Same page, paragraph, answers and revealed content; never reloads.
+  const changeMode = (m) => {
+    if (m === mode) return;
+    modeRef.current = m; setMode(m); savePrefs({ mode: m });
+    if (m === 'caption') {
+      narrator.setEnabled(false); FX.on = false;           // stop everything NOW (audio, speech, mouth, timers)
+      introOver.current = true; setHold(null);
+      if (started && para) markRevealed(page.id, para.last); // show the whole paragraph's content; wait for Continue
+    } else { narrator.setEnabled(true); FX.on = audio; }    // Narration: nothing starts by itself — the learner presses Play
+  };
+  const playPara = () => { if (para) { FX.tap(); setHold(null); narrator.unlock(); narrator.playRange(para.first, para.last); } };
+  const pausePara = () => { FX.tap(); narrator.pause(); };
+  const resumeOrPlay = () => { if (ns.status === 'paused') { FX.tap(); narrator.play(); } else playPara(); };
 
-  // "Play welcome" (shown only when the browser blocked autoplay): this click is the allowed user interaction
+  // "Play welcome" (cover; shown when the browser blocked autoplay or after switching back to Narration): this click is the allowed interaction
   const playWelcome = () => {
     narrator.unlock(); FX.unlock(); FX.on = audio; narrator.setAudio(audio);
     FX.tap();
@@ -479,30 +610,30 @@ function App() {
   // 'Skip intro': stop the welcome audio + mouth; the cover then shows the two course entry choices (it does not enter the lesson)
   const skipIntro = () => { introOver.current = true; narrator.stop(); };
   const begin = (opts = {}) => {
-    narrator.stop(); // end the welcome narration (page 1 narration loads in the scene effect)
+    narrator.stop(); // end the welcome narration (the first paragraph starts in the page effect)
     narrator.unlock(); FX.unlock();
-    if (opts.fresh) { setState({}); setSeen({}); setMaxSeg({}); setIdx(0); }
+    if (opts.fresh) { setState({}); setSeen({}); setMaxSeg({}); setParaMap({}); setRevMap({}); setIdx(0); }
     narrator.setAudio(audio);
-    FX.on = audio;
+    FX.on = audio && mode === 'narration';
     FX.tap();
     track('session_start', {});
     setStarted(true);
   };
-  const closeOnb = () => { saveSess({ onboarded: true }); setOnb(false); narrator.load(page.narration(state), sceneNo); };
+  const closeOnb = () => { saveSess({ onboarded: true }); setOnb(false); startPara(paras, paraIdx); };
 
   if (!started) return (
     <StartScreen onPlay={playWelcome} onSkip={skipIntro} onStart={begin} canContinue={hasSavedProgress(saved)}
-      audio={audio} onAudio={toggleAudio} cc={cc} onCC={toggleCC} ns={nsRaw.scene === 0 ? nsRaw : NS0} levelFn={levelFn} />
+      audio={audio} onAudio={toggleAudio} cc={cc} onCC={toggleCC} ns={nsRaw.scene === 0 ? nsRaw : NS0} levelFn={levelFn} mode={mode} onMode={changeMode} />
   );
 
   const PageComp = page.Component;
-  const playing = ns.status === 'playing';
-  const live = ns.status === 'playing' || ns.status === 'paused';
-  const segCount = ns.segCount || 1;
   const interactive = !!page.lockHint;
-  const pose = onb ? 'wave' : celebrate ? 'celebrate' : playing ? 'explain' : (interactive && !complete) ? 'think' : 'rest';
+  const pose = onb ? 'wave' : celebrate ? 'celebrate'
+    : mode === 'caption' ? ((interactive && !complete && paraIdx === paras.length - 1) ? 'think' : 'explain')
+    : playing ? 'explain' : (interactive && !complete) ? 'think' : 'rest';
+  const showText = mode === 'caption' || cc;
   return (
-    <div className={'app' + (cc ? ' has-cc' : '')}>
+    <div className={'app mode-' + mode} ref={appRef}>
       <header className="topbar">
         <div className="brand"><b>Build Your First AI Agent</b><span>Unit 1 · Module 1 — Distinguish</span></div>
         <ol className="progress" aria-label="Lesson progress">
@@ -513,40 +644,22 @@ function App() {
           ))}
         </ol>
         <div className="tb-right">
-          <div className="narr" role="group" aria-label="Narration controls">
-            <div className="narr-prog" aria-label={`Narration part ${Math.min(ns.seg + 1, segCount)} of ${segCount}`}>
-              <span className="narr-count">{ended ? 'Done' : `${Math.min(ns.seg + 1, segCount)} of ${segCount}`}</span>
-              <span className="narr-dots">
-                {Array.from({ length: segCount }).map((_, i) => (
-                  <button key={i} type="button" className={`ndot ${!ended && i === ns.seg ? 'is-cur' : ''} ${ended || i < ns.seg ? 'is-past' : ''}`}
-                    aria-label={`Play narration part ${i + 1}`} data-track={'narr-dot-' + (i + 1)} onClick={() => { FX.tap(); narrator.playSeg(i); }} />
-                ))}
-              </span>
-            </div>
-            <button type="button" className="nbtn is-primary" data-track="narr-playpause" onClick={() => { FX.tap(); playing ? narrator.pause() : narrator.play(); }} aria-label={playing ? 'Pause narration' : 'Play narration'} title={playing ? 'Pause' : 'Play'}>
-              <Icon name={playing ? 'pause' : 'play'} size={17} />
-            </button>
-            <button type="button" className="nbtn" data-track="narr-replay" onClick={() => { FX.tap(); narrator.replay(); }} aria-label="Replay narration from the start" title="Replay"><Icon name="replay" size={18} /></button>
-          </div>
-          <span className="nsep" aria-hidden="true" />
-          <CornerToggles audio={audio} cc={cc} onAudio={toggleAudio} onCC={toggleCC} />
+          <ModeSwitch mode={mode} onMode={changeMode} />
+          {mode === 'narration' && <><span className="nsep" aria-hidden="true" /><CornerToggles audio={audio} cc={cc} onAudio={toggleAudio} onCC={toggleCC} /></>}
         </div>
       </header>
 
       <main className="stage" ref={stageRef} onClick={onStageClick}>
         <div className="fit" ref={fitRef}>
           <div className="fit-inner" ref={innerRef}>
-            <PageComp key={page.id} st={pst} set={setPage} say={say} beat={onb ? -1 : beat} seg={ended ? 99 : ns.seg} hl={live ? ns.hl : null} all={state} />
+            <PageComp key={page.id} st={pst} set={setPage} say={say} beat={onb ? -1 : beat} seg={mode === 'caption' ? -1 : (live ? ns.seg : -1)} hl={live ? ns.hl : null} all={state} />
           </div>
         </div>
       </main>
 
-      {cc && (
-        <div className="caption-bar" aria-live="polite">
-          <span className="caption-k">CC</span>
-          <p>{live && ns.caption ? ns.caption : <span className="caption-idle">{ended ? 'Narration finished — tap a dot or Replay to hear it again.' : 'Captions will appear here while Milo speaks.'}</span>}</p>
-        </div>
-      )}
+      <ExplainPanel panelRef={panelRef} mode={mode} showText={showText} texts={paras.map(p => p.text)} k={paraIdx} n={paras.length}
+        onBack={() => { FX.tap(); goPara(paraIdx - 1); }} onNext={() => { FX.tap(); goPara(paraIdx + 1); }}
+        playing={playing} onPlay={resumeOrPlay} onPause={pausePara} onReplay={playPara} />
 
       <footer className="bottombar">
         <div className="bb-left">
@@ -568,7 +681,7 @@ function App() {
         </div>
         <div className="bb-badge-space" aria-hidden="true" />
       </footer>
-      <MiloGuide pose={pose} small={interactive} visible={!onb} speaking={!!ns.speaking && ns.status === 'playing'} levelFn={levelFn} cue={cue} />
+      <MiloGuide pose={pose} small={interactive} visible={!onb} speaking={!!ns.speaking && playing} levelFn={levelFn} cue={cue} />
       <FloatingCursor key={idx} cue={cue} hidden={answering || onb} />
       {onb && <Onboarding onDone={closeOnb} />}
     </div>
@@ -616,7 +729,8 @@ function CoverCards() {
   );
 }
 
-function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc, onCC, ns, levelFn }) {
+function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc, onCC, ns, levelFn, mode, onMode }) {
+  const caption = mode === 'caption'; // Caption Only: no welcome audio; the full text and both entry choices are shown immediately
   const blocked = ns.status === 'blocked';
   const ended = ns.status === 'ended';
   const live = ns.status === 'playing' || ns.status === 'paused';
@@ -624,7 +738,9 @@ function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc,
   const [done, setDone] = useState(false);   // welcome finished naturally (sticky)
   const [hello, setHello] = useState(true);  // one small wave when the cover first appears
   const primRef = useRef(null), playRef = useRef(null);
-  const choices = done || skipped;
+  const [seenChoices, setSeenChoices] = useState(false); // once the choices have been shown they stay (switching modes never hides or enters)
+  const choices = seenChoices || caption || done || skipped;
+  useEffect(() => { if (caption || done || skipped) setSeenChoices(true); }, [caption, done, skipped]);
   useEffect(() => { const t = setTimeout(() => setHello(false), 2600); return () => clearTimeout(t); }, []);
   useEffect(() => { if (ended) setDone(true); }, [ended]);
   useEffect(() => { // keyboard users land on the next useful control without stealing focus from something they chose
@@ -632,7 +748,7 @@ function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc,
     if (el && (!document.activeElement || document.activeElement === document.body)) el.focus();
   }, [choices, blocked]);
   const part = live ? (ns.part || 0) : 0;
-  const pose = live ? WELCOME_GESTURES[Math.min(part, WELCOME_GESTURES.length - 1)] : (done || skipped) ? 'idle' : hello ? 'wave' : 'idle';
+  const pose = live && !caption ? WELCOME_GESTURES[Math.min(part, WELCOME_GESTURES.length - 1)] : (done || skipped) ? 'idle' : hello ? 'wave' : 'idle';
   const skip = () => { onSkip(); setSkipped(true); };
   const startNew = <button ref={canContinue ? null : primRef} type="button" className={'cv-choice tap ' + (canContinue ? 'is-alt' : 'is-primary')} data-track="start-new" onClick={() => onStart({ fresh: true })}>Start new</button>;
   const cont = <button ref={canContinue ? primRef : null} type="button" className={'cv-choice tap ' + (canContinue ? 'is-primary' : 'is-alt')} data-track="continue" disabled={!canContinue}
@@ -641,7 +757,8 @@ function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc,
   return (
     <div className="start cv" data-screen-label="01 Start">
       <div className="cv-ring cv-ring-tl" aria-hidden="true" /><div className="cv-ring cv-ring-br" aria-hidden="true" />
-      <div className="start-top"><CornerToggles audio={audio} cc={cc} onAudio={onAudio} onCC={onCC} /></div>
+      <div className="start-mode"><ModeSwitch mode={mode} onMode={onMode} /></div>
+      <div className="start-top">{!caption && <CornerToggles audio={audio} cc={cc} onAudio={onAudio} onCC={onCC} />}</div>
       <div className="cv-stage">
         <svg className="cv-ticks" viewBox="0 0 1672 941" aria-hidden="true">
           <g stroke="#EADFC6" strokeWidth="14" strokeLinecap="round"><path d="M84 355L128 380M150 322L158 348M70 412L108 408M1484 738L1472 770M1524 742L1530 774M1560 714L1584 736" /></g>
@@ -654,6 +771,7 @@ function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc,
         <div className="cv-bottom">
           {choices ? (
             <>
+              {!caption && !live && ns.status !== 'blocked' && <button type="button" className="cv-replay tap" data-track="play-welcome" onClick={onPlay}><Icon name="play" size={16} /> Play welcome</button>}
               <div className={'cv-choices' + (done ? ' is-ready' : '')} role="group" aria-label="Course entry">{startNew}{cont}</div>
               {!canContinue && <p id="cv-cont-note" className="cv-note">No saved progress yet</p>}
             </>
@@ -666,9 +784,9 @@ function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc,
             </>
           ) : null}
         </div>
-        {!choices && <button type="button" className="cv-skip tap" data-track="skip-intro" onClick={skip}>Skip intro</button>}
+        {!choices && !caption && <button type="button" className="cv-skip tap" data-track="skip-intro" onClick={skip}>Skip intro</button>}
       </div>
-      {cc && <div className="caption-bar sx-cc" aria-live="polite"><span className="caption-k">CC</span><p>{WELCOME_TEXT}</p></div>}
+      {(caption || cc) && <section className="xpanel is-cover" aria-label="Welcome text"><div className="xp-text" aria-live="polite"><p>{WELCOME_TEXT}</p></div></section>}
     </div>
   );
 }

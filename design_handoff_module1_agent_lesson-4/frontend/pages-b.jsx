@@ -81,7 +81,9 @@ function Page5({ st, set, beat }) {
   );
 }
 PAGES.push({
-  id: 'p5', phase: 1, title: 'Single LLM Call', accent: 'var(--user)',
+  id: 'p5', phase: 1, title: 'Single LLM Call',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 0], main: 'line' }, { s: [1, 2], main: 'headlines' }], accent: 'var(--user)',
   narration: () => [
     { t: 'In a single LLM call, the user gives the model one bounded request, and the model produces one primary response.', hl: 'line' },
     { parts: [
@@ -103,6 +105,10 @@ const P6_STEPS = [
   { id: 'export', short: 'Export' },
 ];
 const P6_EDGE_FB = 'The workflow has no predefined rule for this case, so it cannot choose a path on its own — it must stop and notify Maya (or follow a rule Maya defined in advance).';
+const P7_FEEDBACK = [ // shown after the learner solves the Page 7 question (derived from page state → restored with saved progress)
+  { t: 'Not reliably. The appropriate next action depends on what the system discovers in each case.', hl: 'q7', fb: true },
+  { t: 'This is where agentic decision-making can create value.', hl: 'next', fb: true },
+];
 const P6_EDGE_ACTIONS = ['Stop and notify Maya', 'Search another asset library', 'Generate a replacement logo'];
 
 function DeliverableMock({ kind }) {
@@ -158,7 +164,9 @@ function Page6({ beat, hl }) {
   );
 }
 PAGES.push({
-  id: 'p6', phase: 1, title: 'Fixed Workflow', accent: 'var(--rules)',
+  id: 'p6', phase: 1, title: 'Fixed Workflow',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'delivs' }, { s: [2, 2], main: 'chain' }, { s: [3, 3], main: 'tag' }, { s: [4, 4], main: 'edge' }], accent: 'var(--rules)',
   narration: () => [
     { t: "Maya's poster needs to become three things: a large poster, a small social post, and an email banner.", hl: 'delivs' },
     { t: 'The same four steps run for each one.', hl: 'chain' },
@@ -194,7 +202,7 @@ function Page7({ st, set, say }) {
   const m = useMatcher({
     qid: 'p7-sort', tokens: P7_DESIGNS.map(d => ({ id: d.id, label: 'Design ' + d.id })), targets: ['single', 'workflow', 'agent'].map(id => ({ id })), answers: P7_ANS,
     state: sort, set: (p) => set({ sort: { ...sort, ...p } }),
-    hint: 'Think about who decides the next step in each system.', trayHl: 'designs', trayLabel: 'Tap a design, then tap the approach it belongs to',
+    hint: 'Think about who decides the next step in each system.', trayHl: 'designs', trayLabel: 'Drag a design onto the approach it belongs to (or tap it, then tap the approach)',
     renderToken: (tk, used, placed) => placed
       ? <span className="dtoken is-placed">Design {tk.id}</span>
       : <span className={'dtoken ' + (used ? 'is-used' : '')}>{tk.label}</span>,
@@ -202,10 +210,7 @@ function Page7({ st, set, say }) {
   const onChange = (q) => {
     const was = st.q && st.q.solved;
     set({ q });
-    if (q.solved && !was) say([
-      { t: 'Not reliably. The appropriate next action depends on what the system discovers in each case.', hl: 'q7' },
-      { t: 'This is where agentic decision-making can create value.', hl: 'next' },
-    ]);
+    // the feedback paragraph ('Not reliably…') now appears by itself once q.solved (see P7_FEEDBACK / narration)
   };
   const problems = ['Poor text contrast', 'Inconsistent spacing', 'Incorrect brand assets'];
   return (
@@ -258,13 +263,16 @@ function Page7({ st, set, say }) {
 }
 PAGES.push({
   id: 'p7', phase: 2, title: 'When Agentic Decision-Making Becomes Useful',
-  narration: () => [
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 0], main: 'cq' }, { s: [1, 3], main: 'dA' }, { s: [4, 4], main: 'sort' }, { s: [5, 5], main: 'review' }],
+  narration: (all) => [
     { t: 'Three designs, three questions. For each one, ask: who decides what happens next?', hl: 'cq', key: true },
     { t: 'Design A: the user writes the content and places every element.', hl: 'dA' },
     { t: 'Design B: a fixed set of rules places the elements.', hl: 'dB' },
     { t: 'Design C: the model decides the layout while it works.', hl: 'dC' },
     { t: 'Sort them — which is a single call, which is a workflow, which is an agent?', hl: 'sort' },
     { t: 'Now Maya needs AI to review several designs. Each design may contain a different problem, and each problem may require a different action or tool.', hl: 'review' },
+    ...(all && all.p7 && all.p7.q && all.p7.q.solved ? P7_FEEDBACK : []),
   ],
   isComplete: (st) => !!(st.sort && ['single', 'workflow', 'agent'].every(a => (st.sort.matched || {})[a]) && st.q && st.q.solved),
   lockHint: 'Sort the designs, then answer the question',
@@ -375,7 +383,9 @@ function Page8({ st, set, beat, seg }) {
   );
 }
 PAGES.push({
-  id: 'p8', phase: 2, title: 'AI Agent and Human Boundaries', accent: 'var(--model)',
+  id: 'p8', phase: 2, title: 'AI Agent and Human Boundaries',
+  // explanation paragraphs: contiguous narration segments [from, to] grouped by meaning, with the main target the cursor indicates in Caption Only
+  paras: [{ s: [0, 1], main: 'goal' }, { s: [2, 3], main: 'loop' }, { s: [4, 4], main: 'fence' }], accent: 'var(--model)',
   narration: () => [
     { t: 'Maya gives the system a goal.', hl: 'goal' },
     { parts: [

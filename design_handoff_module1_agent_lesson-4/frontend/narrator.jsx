@@ -49,7 +49,7 @@ function createNarrator() {
   const st = {
     segs: [], scene: 0, si: 0, pi: 0, status: 'idle', audio: true, token: 0, timers: [], voice: null,
     stopAt: null, mode: null, failed: {}, manifest: null, el: null, raf: 0,
-    speaking: false, blocked: false, ctx: null, an: null, anBuf: null, anFailed: false,
+    speaking: false, blocked: false, disabled: false, endAt: null, rangeFrom: 0, ctx: null, an: null, anBuf: null, anFailed: false,
   };
   const listeners = new Set();
   const seg = () => st.segs[Math.min(st.si, st.segs.length - 1)];
@@ -219,7 +219,9 @@ function createNarrator() {
   }
 
   function startSeg(i, resume = false) {
-    if (i >= st.segs.length) { st.status = 'ended'; st.stopAt = null; st.mode = null; emit(); return; }
+    if (st.disabled) return; // Caption Only: nothing may ever speak or run on timers
+    // 'ended' = the whole narration finished OR the requested paragraph range finished (the app then waits for the learner)
+    if (i >= st.segs.length || (st.endAt != null && i >= st.endAt)) { st.status = 'ended'; st.stopAt = null; st.mode = null; st.speaking = false; emit(); return; }
     if (st.stopAt != null && i !== st.stopAt) { st.si = st.stopAt; st.stopAt = null; st.status = 'paused'; st.pi = 0; emit(); return; }
     hardStop();
     const my = st.token; st.blocked = false;
@@ -235,25 +237,28 @@ function createNarrator() {
     subscribe(f) { listeners.add(f); return () => listeners.delete(f); },
     supported: true,
     unlock() {
+      if (st.disabled) return;
       try { ensureEl(); st.el.muted = true; const p = st.el.play(); if (p && p.catch) p.catch(() => {}); st.el.pause(); st.el.muted = false; } catch (e) {}
       try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) { if (!st.ctx) st.ctx = new AC(); if (st.ctx.state === 'suspended') st.ctx.resume(); } } catch (e) {}
       if (synth) { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); } catch (e) {} }
     },
-    load(segs, scene) { hardStop(); st.scene = scene; st.segs = segs.map(normSeg); st.si = 0; st.pi = 0; st.stopAt = null; startSeg(0); },
-    append(segs) {
-      if (!segs || !segs.length) return;
-      const start = st.segs.length;
-      st.segs = st.segs.concat(segs.map(normSeg));
-      if (st.status !== 'playing') { st.stopAt = null; startSeg(start); } else emit();
-    },
+    load(segs, scene) { if (st.disabled) return; hardStop(); st.scene = scene; st.segs = segs.map(normSeg); st.si = 0; st.pi = 0; st.stopAt = null; st.endAt = null; st.rangeFrom = 0; startSeg(0); },
+    // paragraph mode: load a page's segments WITHOUT playing, update them in place (feedback paragraphs appear), and play one range
+    prepare(segs, scene) { hardStop(); st.scene = scene; st.segs = segs.map(normSeg); st.si = 0; st.pi = 0; st.stopAt = null; st.endAt = null; st.status = 'idle'; st.blocked = false; st.mode = null; emit(); },
+    setSegs(segs) { st.segs = segs.map(normSeg); },
+    playRange(from, to) { if (st.disabled || from < 0 || from >= st.segs.length) return; hardStop(); st.stopAt = null; st.rangeFrom = from; st.endAt = Math.min(to + 1, st.segs.length); startSeg(from); },
+    // Caption Only switches the whole narrator off: stops audio + speech + timers and refuses to start anything until re-enabled
+    setEnabled(on) { st.disabled = !on; if (!on) { hardStop(); st.status = 'idle'; st.blocked = false; st.mode = null; st.speaking = false; emit(); } },
+    get enabled() { return !st.disabled; },
+    append(segs) { if (segs && segs.length) st.segs = st.segs.concat(segs.map(normSeg)); },
     play() {
-      if (st.status === 'playing') return;
+      if (st.disabled || st.status === 'playing') return;
       st.stopAt = null;
-      if (st.status === 'ended' || st.status === 'idle' || st.status === 'blocked') { startSeg(st.status === 'blocked' ? st.si : 0); return; }
+      if (st.status === 'ended' || st.status === 'idle' || st.status === 'blocked') { startSeg(st.status === 'blocked' ? st.si : st.rangeFrom); return; }
       startSeg(st.si, st.mode === 'file');
     },
     pause() { if (st.status !== 'playing') return; hardStop(); st.status = 'paused'; emit(); },
-    replay() { st.stopAt = null; startSeg(0); },
+    replay() { if (st.disabled) return; st.stopAt = null; startSeg(st.rangeFrom); },
     playSeg(i) { if (i < 0 || i >= st.segs.length) return; st.stopAt = i; startSeg(i); },
     segOfHl(key) { return st.segs.findIndex(s => s.parts.some(p => (p.hl || s.hl) === key)); },
     hlMap() { // hl → [segIndex, partIndex] of its first mention
@@ -262,7 +267,7 @@ function createNarrator() {
       return m;
     },
     stop(scene) { hardStop(); if (scene != null) { st.scene = scene; st.segs = []; st.si = 0; st.pi = 0; } st.status = 'idle'; st.blocked = false; emit(); },
-    setAudio(on) { const wasPlaying = st.status === 'playing' || (st.status === 'blocked' && !on); hardStop(); st.audio = on; if (wasPlaying) startSeg(st.si); else emit(); },
+    setAudio(on) { if (st.disabled) { st.audio = on; return; } const wasPlaying = st.status === 'playing' || (st.status === 'blocked' && !on); hardStop(); st.audio = on; if (wasPlaying) startSeg(st.si); else emit(); },
     level() { // 0..1 loudness of what is playing now, or null when no meter is available (Web Speech / suspended context)
       if (!st.an || !st.speaking) return null;
       st.an.getByteTimeDomainData(st.anBuf); let s = 0; for (let i = 0; i < st.anBuf.length; i++) { const v = (st.anBuf[i] - 128) / 128; s += v * v; }
