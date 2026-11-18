@@ -414,8 +414,13 @@ PAGES.push({
     const first = s
       ? `At the beginning, you selected ${choiceLabel(s.choice)} because ${explanationOf(s)}`
       : 'At the beginning, you made an initial choice.';
+    // Pre-rendered Kokoro variants exist for "no saved choice" and for the 3 approaches × 3 preset reasons;
+    // a reason the learner typed themselves can't be pre-rendered → Web Speech (dyn).
+    const why = s ? (s.text || '').trim().replace(/[.!?]+$/, '').toLowerCase() : '';
+    const ci = s ? P3_CHIPS.findIndex(c => c.toLowerCase() === why) : -1;
+    const audio = !s ? 'scene12-seg1-none' : (ci >= 0 && ['single', 'workflow', 'agent'].includes(s.choice) ? `scene12-seg1-${s.choice}-${ci}` : undefined);
     return [
-      { t: first, hl: 'mychoice', dyn: true },
+      { t: first, hl: 'mychoice', dyn: true, audio },
       { t: "But 'create a promotional visual' did not provide enough information to choose a system.", hl: 'note1' },
       { parts: [
         { t: 'The deliverable may look similar.', hl: 'branches' },

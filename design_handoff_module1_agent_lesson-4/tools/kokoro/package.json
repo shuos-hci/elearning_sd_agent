@@ -1,0 +1,14 @@
+{
+  "name": "kokoro-audio-tools",
+  "private": true,
+  "type": "module",
+  "description": "Standalone local narration generator (kokoro-js). Not part of the Next.js site.",
+  "scripts": {
+    "sample": "node sample.mjs"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "@soundtouchjs/core": "^2.1.1",
+    "kokoro-js": "^1.2.1"
+  }
+}

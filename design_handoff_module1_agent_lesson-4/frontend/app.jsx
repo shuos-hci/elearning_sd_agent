@@ -1,11 +1,24 @@
 /* App shell (Round 2): start screen, header + progress, narration controls, top-right sound/CC toggles,
-   staged reveal + teacher pointing (replaces the R1 highlight box), Scene 2 onboarding, captions,
+   staged reveal + Milo (content highlights instead of pointing), Scene 2 onboarding, captions,
    navigation gating, fit-to-viewport, analytics hooks. */
 const PHASES = ['Hook', 'Learn', 'Compare', 'Practice', 'Reflect'];
 const LS_KEY = 'bya-m1-v3';
 const SS_KEY = 'bya-m1-session'; // per-session prefs: { audio, cc, onboarded }
 
-function loadSaved() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch (e) { return null; } }
+/* A saved record is only used if it is structurally valid (page index in range, plain-object state) — otherwise it is ignored. */
+function loadSaved() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_KEY));
+    const obj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
+    if (!obj(raw) || !Number.isInteger(raw.idx) || raw.idx < 0 || raw.idx >= PAGES.length || !obj(raw.state) || !obj(raw.seen) || !obj(raw.maxSeg)) return null;
+    return { idx: raw.idx, state: raw.state, seen: raw.seen, maxSeg: raw.maxSeg };
+  } catch (e) { return null; }
+}
+/* "Continue" is offered only when the record shows real progress: a later page, any answer, a visited page (even page 1) or narration progress.
+   (The app writes an empty record on every load, so the mere existence of a record is not progress.) */
+function hasSavedProgress(s) {
+  return !!s && (s.idx > 0 || Object.keys(s.state).length > 0 || Object.keys(s.seen).some(k => s.seen[k]) || Object.keys(s.maxSeg).some(k => s.maxSeg[k] > 0));
+}
 function loadSess() { try { return JSON.parse(sessionStorage.getItem(SS_KEY)) || {}; } catch (e) { return {}; } }
 function saveSess(p) { try { sessionStorage.setItem(SS_KEY, JSON.stringify({ ...loadSess(), ...p })); } catch (e) {} }
 const track = (...a) => { try { window.Track && window.Track.event(...a); } catch (e) {} };
@@ -73,75 +86,146 @@ function useStagedReveal(stageRef, map, seg, part, beat, ended, key) {
   }, [map, seg, part, beat, ended, key]);
 }
 
-/* ---------- Teacher agent (Fix 12): poses + pointing hand ---------- */
-const POSES = ['wave', 'point', 'think', 'celebrate'];
-function Hand({ dir }) {
-  // small hand cursor in the teacher's illustration style (mustard cuff, warm skin, dark outline)
-  const rot = dir === 'corner' ? 38 : dir === 'up' ? 90 : dir === 'down' ? 90 : dir === 'left' ? 180 : 0;
+/* ---------- Milo (replaces the teacher): fixed reserved area bottom-left, above the caption strip / footer ----------
+   Milo stays in his corner. When the narration moves to a NEW AREA he makes a small arm gesture with a brief teal signal at his hand;
+   the instruction itself is carried by the floating teaching cursor (FloatingCursor) which glides from target to target and never
+   returns to him. Poses: explain · think · celebrate · rest (wave in the onboarding). */
+function MiloGuide({ pose, small, visible, speaking, levelFn, cue }) {
+  return <div className={`milo-guide ${small ? 'is-small' : ''} ${visible ? '' : 'is-off'}`}><Milo pose={pose} decorative speaking={speaking} levelFn={levelFn} cue={cue} /></div>;
+}
+
+/* ---------- Milo's floating teaching cursor ----------
+   An instructional overlay (not the learner's mouse): flat SVG arrow — teal fill, navy outline, ivory inset, mustard dot — with a faint
+   teal halo. First target of a page: fades in beside it. Next targets: the same cursor glides (350–500 ms ease-in-out) from where it is
+   to the next one; if a target arrives mid-flight it re-targets from its current visible position (a single tween, nothing queued).
+   On arrival it nudges 4 px toward the target once, then stays still. Placement picks the spot (tip at an edge of the target) where the
+   arrow covers the least text and stays clear of captions, navigation and Milo. pointer-events: none, aria-hidden; the system cursor is
+   untouched. Hidden while the learner answers; reduced motion → no travel, no nudge. */
+function CursorSVG({ size = 38, className = '' }) {
   return (
-    <svg viewBox="0 0 64 40" width="44" height="28" style={{ transform: `rotate(${rot}deg)`, overflow: 'visible' }} aria-hidden="true">
-      <rect x="1" y="9" width="14" height="22" rx="4" fill="#D9A441" stroke="#3B2A25" strokeWidth="2" />
-      <path d="M15 12 h8 l26 -1 a4.5 4.5 0 0 1 0 9 h-14 v2 h4 a4 4 0 0 1 0 8 h-6 a4 4 0 0 1 0 0 h-18 z" fill="#F4C7A9" stroke="#3B2A25" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M33 22 h6 M33 30 h3" stroke="#3B2A25" strokeWidth="1.6" strokeLinecap="round" />
+    <svg className={className} width={size} height={size * 140 / 124} viewBox="0 0 124 140" aria-hidden="true" focusable="false" style={{ overflow: 'visible' }}>
+      <path d="M12 10L112 73L84 88L98 108Q104 118 95 124Q88 129 81 123L60 102L36 119Z" fill="#16A092" stroke="#1C2130" strokeWidth="6" strokeLinejoin="round" />
+      <path d="M31 32L35 72L54 50Z" fill="#F4EBD3" stroke="#F4EBD3" strokeWidth="2.5" strokeLinejoin="round" />
+      <circle cx="86" cy="112" r="5.4" fill="#FBB92D" />
     </svg>
   );
 }
-function Teacher({ pose, hl, small, stageRef, visible }) {
-  const handRef = useRef(null), outRef = useRef(null), figRef = useRef(null);
-  const [corner, setCorner] = useState('bl');
-  const [dir, setDir] = useState('right');
+const CUR_TIP = { x: 12 / 124, y: 10 / 124 };   // tip inside the 124×140 box, as fractions of the width
+const CUR_BODY = { w: 100 / 124, h: 118 / 124 };   // the arrow's body relative to its width, measured from the tip (rotation 0 = tip up-left)
+// placement candidates: [rotation°, anchor x fraction, anchor y fraction, dx, dy] — tip lands on that point of the target's edge
+const CUR_CANDIDATES = [[0, .72, 1, 0, 2], [0, 1, .55, 2, 0], [90, .28, 1, 0, 2], [180, .72, 0, 0, -2], [-90, .28, 0, 0, -2], [180, 0, .55, -2, 0], [-90, 1, .55, 2, 0], [90, 0, .55, -2, 0]];
+const rectArea = (a, b) => Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));
+
+function FloatingCursor({ cue, hidden }) {
+  const root = useRef(null), nudge = useRef(null), rot = useRef(null);
+  const S = useRef({ pos: null, from: null, t0: 0, dur: 420, tween: false, raf: 0, fade: 0, el: null, cand: 0, angle: 0, obst: null, evalAt: 0, on: false });
+  const active = !!cue && !hidden;
   useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const hand = handRef.current, out = outRef.current, fig = figRef.current;
-      if (hand && out && fig) {
-        const el = hl ? document.querySelector(`[data-hl="${hl}"]`) : null;
-        const st = stageRef.current && stageRef.current.getBoundingClientRect();
-        let placed = false;
-        if (el && st && window.innerWidth >= 1100) {
-          const r = el.getBoundingClientRect();
-          const inFooter = !!el.closest('.bottombar');
-          const vis = r.width > 0 && r.height > 0 && (inFooter || (r.bottom > st.top + 4 && r.top < st.bottom - 4));
-          if (vis) {
-            let x, y, d;
-            if (inFooter) { d = 'up'; x = r.left + r.width / 2 - 12; y = r.top - 40; }
-            else { d = 'corner'; x = r.left - 34; y = r.top - 30; }
-            x = Math.max(2, Math.min(window.innerWidth - 50, x)); y = Math.max(st.top - 30, y);
-            setDir(d);
-            hand.style.opacity = '1';
-            hand.style.transform = `translate(${x}px, ${y}px)`;
-            out.style.opacity = '0';
-            placed = true;
-            // teacher swaps corner if the target sits near her zone
-            const fr = fig.getBoundingClientRect();
-            const near = r.left < fr.right + 60 && r.bottom > fr.top - 40 && !inFooter;
-            setCorner(c => (near ? (c === 'bl' ? 'tl' : c) : (c === 'tl' && !(r.top < st.top + 220 && r.left < fr.right + 60) ? 'bl' : c)));
-          }
-        }
-        if (!placed) {
-          hand.style.opacity = '0';
-          // subtle fallback outline only when pointing cannot be placed
-          if (el && el.getBoundingClientRect().width > 0) {
-            const r = el.getBoundingClientRect();
-            out.style.opacity = '1';
-            out.style.transform = `translate(${r.left - 4}px, ${r.top - 4}px)`;
-            out.style.width = r.width + 8 + 'px'; out.style.height = r.height + 8 + 'px';
-          } else out.style.opacity = '0';
-        }
+    const st = S.current, reduce = prefersReducedMotion();
+    const size = () => (window.innerWidth >= 1100 ? 40 : 32);
+    const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+    // Containers are bigger than what they show: point at the union of the visible boxes/text inside (relative to the target, so it follows layout moves).
+    const contentRel = (el) => {
+      const T = R(el), box = (e) => { const cs = getComputedStyle(e); return (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') || (parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none'); };
+      if (box(el) || el.matches('svg, img')) return { dl: 0, dt: 0, w: T.w, h: T.h };
+      let u = null; const add = (q) => { const l = Math.max(q.l, T.l), t = Math.max(q.t, T.t), r = Math.min(q.r, T.r), b = Math.min(q.b, T.b); if (r - l < 2 || b - t < 2) return; u = u ? { l: Math.min(u.l, l), t: Math.min(u.t, t), r: Math.max(u.r, r), b: Math.max(u.b, b) } : { l, t, r, b }; };
+      let n = 0; const w = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      for (let x = w.nextNode(); x && n < 500; x = w.nextNode(), n++) {
+        const pe = x.nodeType === 3 ? x.parentElement : x; if (!pe || pe.closest('.stg:not(.is-in), [inert]')) continue;
+        const cs = getComputedStyle(pe); if (cs.visibility === 'hidden' || +cs.opacity === 0) continue;
+        if (x.nodeType === 3) { if (!x.nodeValue.trim()) continue; const rg = document.createRange(); rg.selectNodeContents(x); const q = rg.getBoundingClientRect(); add({ l: q.left, t: q.top, r: q.right, b: q.bottom }); }
+        else if (box(x) || x.matches('svg, img')) add(R(x));
       }
-      raf = requestAnimationFrame(tick);
+      return u ? { dl: u.l - T.l, dt: u.t - T.t, w: u.r - u.l, h: u.b - u.t } : { dl: 0, dt: 0, w: T.w, h: T.h };
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [hl]);
+    const area = (T) => { const c = st.rel || { dl: 0, dt: 0, w: T.w, h: T.h }; return { l: T.l + c.dl, t: T.t + c.dt, r: T.l + c.dl + c.w, b: T.t + c.dt + c.h, w: c.w, h: c.h }; };
+    // everything the arrow should not cover: visible text, controls; plus zones it must stay out of
+    const collect = () => {
+      const text = [], zones = [], tgt = st.el;
+      document.querySelectorAll('.stage, .bottombar, .topbar').forEach(box => {
+        const w = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+          if (!n.nodeValue.trim()) continue; const pe = n.parentElement; if (!pe) continue;
+          const cs = getComputedStyle(pe); if (cs.visibility === 'hidden' || +cs.opacity === 0 || pe.closest('.stg:not(.is-in), [inert]')) continue;
+          const rg = document.createRange(); rg.selectNodeContents(n); const q = rg.getBoundingClientRect(); if (q.width > 1 && q.height > 1) text.push({ l: q.left, t: q.top, r: q.right, b: q.bottom });
+        }
+      });
+      document.querySelectorAll('.stage button, .stage input, .stage textarea, .bottombar button').forEach(e => { const q = R(e); if (q.w > 2 && !(tgt && tgt.contains(e))) text.push(q); });
+      document.querySelectorAll('.stage svg:not(.mcursor-svg), .stage img').forEach(e => { // diagram graphics / icons are content too
+        if (e.closest('.stg:not(.is-in), [inert], .milo, .mcursor') || (tgt && tgt.contains(e))) return; const q = R(e); if (q.w > 6 && q.h > 6) text.push(q); });
+      [['.caption-bar', 8], ['.topbar', 8], ['.bottombar', 8], ['.milo-guide', 10]].forEach(([sel, pad]) => { const e = document.querySelector(sel); if (e && !(tgt && (tgt.closest(sel) || e.contains(tgt)))) { const q = R(e); zones.push({ l: q.l - pad, t: q.t - pad, r: q.r + pad, b: q.b + pad }); } });
+      return { text, zones };
+    };
+    // the arrow's body box for a candidate at a given tip point (rotation about the tip)
+    const bodyBox = (c, tx, ty, s) => {
+      const a = c[0] * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a), xs = [], ys = [];
+      [[0, 0], [CUR_BODY.w * s, 0], [CUR_BODY.w * s, CUR_BODY.h * s], [0, CUR_BODY.h * s]].forEach(([x, y]) => { xs.push(tx + x * cos - y * sin); ys.push(ty + x * sin + y * cos); });
+      return { l: Math.min(...xs), r: Math.max(...xs), t: Math.min(...ys), b: Math.max(...ys) };
+    };
+    const tipFor = (c, r) => [r.l + c[1] * r.w + c[3], r.t + c[2] * r.h + c[4]];
+    const score = (c, r, s, ob) => {
+      const [tx, ty] = tipFor(c, r), bx = bodyBox(c, tx, ty, s); let p = 0;
+      const sh = { l: bx.l + 2, t: bx.t + 2, r: bx.r - 2, b: bx.b - 2 };
+      ob.text.forEach(q => { p += rectArea(sh, q); }); ob.zones.forEach(z => { p += rectArea(sh, z) * 12; });
+      const out = (bx.r - bx.l) * (bx.b - bx.t) - rectArea(bx, { l: 6, t: 6, r: window.innerWidth - 6, b: window.innerHeight - 6 }); p += out * 12;
+      return p;
+    };
+    const choose = (r, s) => { // lowest penalty wins; keep the current one unless another is clearly better (no jitter)
+      const ob = st.obst = collect(); const sc = CUR_CANDIDATES.map((c, i) => score(c, r, s, ob) + i * 40);
+      let best = 0; sc.forEach((v, i) => { if (v < sc[best]) best = i; });
+      if (st.pos && sc[st.cand] <= sc[best] + 150) return st.cand; return best;
+    };
+    const apply = (x, y) => { root.current.style.transform = `translate(${x}px, ${y}px)`; };
+    const setAngle = (deg) => { const d = deg - st.angle; st.angle += ((d % 360) + 540) % 360 - 180; rot.current.style.transform = `rotate(${st.angle}deg)`; };
+    const startNudge = () => {
+      if (reduce || !nudge.current) return; const a = (st.angle) * Math.PI / 180, ux = -Math.SQRT1_2, uy = -Math.SQRT1_2; // tip direction at rotation 0 = up-left
+      nudge.current.style.setProperty('--nx', (ux * Math.cos(a) - uy * Math.sin(a)) * 4 + 'px'); nudge.current.style.setProperty('--ny', (ux * Math.sin(a) + uy * Math.cos(a)) * 4 + 'px');
+      nudge.current.classList.remove('is-nudge'); void nudge.current.offsetWidth; nudge.current.classList.add('is-nudge');
+    };
+    const ease = (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const loop = (now) => {
+      let el = st.el;
+      if (!el || !el.isConnected) { // React replaced the node: find the same target again, or let the cursor go
+        el = st.key && [...document.querySelectorAll(`[data-hl="${st.key}"]`)].find(e => e.getBoundingClientRect().width > 4);
+        if (el) st.el = el; else { st.on = false; root.current.classList.remove('is-on'); st.raf = 0; st.pos = null; st.tween = false; return; }
+      }
+      const s = size(), T0 = R(el); if (!st.rel || now - st.evalAt > 300) st.rel = contentRel(el); const r = area(T0); root.current.style.setProperty('--cs', s + 'px');
+      if (r.b < 0 || r.t > window.innerHeight || r.r < 0 || r.l > window.innerWidth) { root.current.classList.remove('is-on'); } else if (st.on) root.current.classList.add('is-on');
+      if (!st.obst || now - st.evalAt > 300) { st.cand = choose(r, s); st.evalAt = now; setAngle(CUR_CANDIDATES[st.cand][0]); }
+      const c = CUR_CANDIDATES[st.cand]; let [tx, ty] = tipFor(c, r);
+      tx = Math.max(4, Math.min(window.innerWidth - 4, tx)); ty = Math.max(4, Math.min(window.innerHeight - 4, ty));
+      if (st.tween) { // one tween toward the CURRENT desired point: re-targeting is just resetting `from`
+        const t = Math.min(1, (now - st.t0) / st.dur), e = ease(t);
+        st.pos = [st.from[0] + (tx - st.from[0]) * e, st.from[1] + (ty - st.from[1]) * e];
+        if (t >= 1) { st.tween = false; st.pos = [tx, ty]; startNudge(); }
+      } else st.pos = [tx, ty]; // at rest it simply follows layout changes (scroll, resize, reveals)
+      apply(st.pos[0], st.pos[1]);
+      st.raf = requestAnimationFrame(loop);
+    };
+    clearTimeout(st.fade);
+    if (active) {
+      const first = !st.on; st.el = cue.el; st.key = cue.key; st.obst = null;
+      if (first || reduce || !st.pos) { // first target of the page: appear beside it, no travel
+        st.tween = false; st.pos = null;
+        const s = size(); st.rel = contentRel(cue.el); const r = area(R(cue.el)); root.current.style.setProperty('--cs', s + 'px'); st.cand = choose(r, s); st.evalAt = performance.now(); setAngle(CUR_CANDIDATES[st.cand][0]);
+        const [tx, ty] = tipFor(CUR_CANDIDATES[st.cand], r); st.pos = [tx, ty]; apply(tx, ty);
+        st.on = true; root.current.classList.add('is-on');
+        if (!reduce) setTimeout(startNudge, 260);
+      } else { st.from = st.pos.slice(); st.t0 = performance.now(); st.rel = contentRel(cue.el); const to = area(R(cue.el)); st.dur = Math.max(350, Math.min(500, 350 + Math.hypot(to.l - st.pos[0], to.t - st.pos[1]) * 0.12)); st.tween = true; st.cand = st.cand; st.evalAt = 0; }
+      if (!st.raf) st.raf = requestAnimationFrame(loop);
+    } else if (st.on) { // no active target: fade out, then forget the position
+      st.on = false; root.current.classList.remove('is-on'); st.tween = false;
+      st.fade = setTimeout(() => { cancelAnimationFrame(st.raf); st.raf = 0; st.pos = null; st.el = null; }, 320);
+    }
+    return () => clearTimeout(st.fade);
+  }, [cue && cue.id, active]);
+  useEffect(() => () => { cancelAnimationFrame(S.current.raf); clearTimeout(S.current.fade); }, []);
   return (
-    <>
-      <div ref={figRef} className={`teacher ${small ? 'is-small' : ''} corner-${corner} ${visible ? '' : 'is-off'}`} aria-hidden="true">
-        {POSES.map(p => <img key={p} src={`assets/teacher/${p}.png`} alt="" className={pose === p ? 'is-on' : ''} draggable="false" />)}
+    <div ref={root} className="mcursor" aria-hidden="true">
+      <div ref={nudge} className="mcursor-nudge" onAnimationEnd={e => e.currentTarget.classList.remove('is-nudge')}>
+        <div ref={rot} className="mcursor-rot"><CursorSVG size={40} className="mcursor-svg" /></div>
       </div>
-      <div ref={handRef} className={'teacher-hand dir-' + dir} aria-hidden="true"><Hand dir={dir} /></div>
-      <div ref={outRef} className="soft-outline" aria-hidden="true" />
-    </>
+    </div>
   );
 }
 
@@ -166,7 +250,7 @@ function CornerToggles({ audio, cc, onAudio, onCC, showCC = true }) {
 /* ---------- Scene 2 onboarding (Fix 10) ---------- */
 function OnbIllus({ k }) {
   if (k === 1) return (
-    <div className="onb-ill"><span className="onb-card" /><span className="onb-hand"><Hand dir="right" /></span></div>
+    <div className="onb-ill"><span className="onb-card"><span className="onb-cur"><CursorSVG size={17} /></span></span></div>
   );
   if (k === 2) return (
     <div className="onb-ill"><span className="onb-opt is-on"><Icon name="check" size={13} sw={3} /></span><span className="onb-opt" /><span className="onb-next">Next <Icon name="right" size={12} /></span></div>
@@ -178,7 +262,7 @@ function OnbIllus({ k }) {
 function Onboarding({ onDone }) {
   const [step, setStep] = useState(0);
   const steps = [
-    'Listen to the teacher — she points at what she is talking about.',
+    'Listen to Milo — his cursor shows the part being explained.',
     'Answer by tapping an option — Next unlocks when you finish.',
     'Use the icons at the top right for sound and captions.',
   ];
@@ -187,7 +271,7 @@ function Onboarding({ onDone }) {
     <div className="onb-back" role="dialog" aria-modal="true" aria-label="How this lesson works">
       <div className="onb">
         <button type="button" className="onb-skip tap" onClick={() => finish('skip')} data-track="onboarding-skip">Skip <Icon name="right" size={14} /></button>
-        <div className="onb-teacher"><img src="assets/teacher/wave.png" alt="Your teacher waving hello" /></div>
+        <div className="onb-teacher"><Milo pose="wave" label="Milo, your learning guide, waving hello" /></div>
         <div className="onb-body">
           <div className="label-mono">How this lesson works · {step + 1} of 3</div>
           <ol className="onb-steps">
@@ -215,6 +299,9 @@ function App() {
   const sess0 = useMemo(loadSess, []);
   const narrator = useMemo(() => createNarrator(), []);
   const [started, setStarted] = useState(false);
+  const [cue, setCue] = useState(null); // {id, el, rect, gesture}: the narrated target the cursor points at
+  const [answering, setAnswering] = useState(false); // the learner is answering → the cursor stays away until the narration reaches a new target
+  const lastCenter = useRef(null);
   const [idx, setIdx] = useState(saved ? saved.idx || 0 : 0);
   const [state, setState] = useState(saved ? saved.state || {} : {});
   const [seen, setSeen] = useState(saved ? saved.seen || {} : {});
@@ -280,6 +367,46 @@ function App() {
   const beatSaved = maxSeg[page.id] || 0;
   useStagedReveal(stageRef, stageMap, onb ? -1 : ns.seg, ns.part || 0, onb ? -1 : beatSaved, ended && !onb, idx + ':' + started);
 
+  // the content the narration is talking about (replaces the old pointing hand): the floating cursor + Milo, see the cue effect below
+  const hlKey = started && !onb && (ns.status === 'playing' || ns.status === 'paused') ? ns.hl : null;
+  // one activation per target change (not per render / per word); never while the learner is typing an answer
+  const lastCueKey = useRef(null), cueSeq = useRef(0);
+  const levelFn = useCallback(() => narrator.level(), [narrator]);
+  useEffect(() => {
+    if (!hlKey) { lastCueKey.current = null; lastCenter.current = null; setCue(null); return; }
+    if (hlKey === lastCueKey.current) return;
+    lastCueKey.current = hlKey; setAnswering(false);
+    const ae = document.activeElement;
+    if (ae && ae.matches && ae.matches('textarea, input')) { setCue(null); return; }
+    const raf = requestAnimationFrame(() => {
+      const all = [...document.querySelectorAll(`[data-hl="${hlKey}"]`)];
+      const pool = all.length ? all : [...document.querySelectorAll(`[data-hlr="${hlKey}"]`)]; // primary target = first data-hl match
+      const el = pool.find(e => { const r = e.getBoundingClientRect(); return r.width > 4 && r.height > 4 && !e.matches('[role="radio"], [role="checkbox"], .chip, .optcard, .qopt'); });
+      if (!el) { setCue(null); return; }
+      const r = el.getBoundingClientRect(), c = [(r.left + r.right) / 2, (r.top + r.bottom) / 2], pc = lastCenter.current;
+      const gesture = !pc || Math.hypot(c[0] - pc[0], c[1] - pc[1]) > 260; // Milo only gestures for a new area of the page
+      lastCenter.current = c;
+      setCue({ id: ++cueSeq.current, key: hlKey, el, gesture, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [hlKey, idx]);
+
+  useEffect(() => { // the learner starts answering (pointer or keyboard on an answer control inside the lesson stage) → hide the teaching cursor
+    if (!started) return;
+    const on = (e) => { const t = e.target; if (t && t.closest && t.closest('.stage') && t.closest('button, input, textarea, select, label, [role="radio"], [role="checkbox"], .chip, .optcard, .qopt')) setAnswering(true); };
+    document.addEventListener('pointerdown', on, true); document.addEventListener('keydown', on, true);
+    return () => { document.removeEventListener('pointerdown', on, true); document.removeEventListener('keydown', on, true); };
+  }, [started]);
+
+  // Opening: as soon as the page is ready, try to play the welcome (the browser may refuse audible autoplay → narrator state 'blocked')
+  const introOver = useRef(false); // set by 'Skip intro' so a pending autoplay attempt can never start the welcome afterwards
+  useEffect(() => {
+    if (started) return;
+    let t; const go = () => { t = setTimeout(() => { if (!introOver.current) narrator.load(WELCOME_SEGS, 0); }, 250); };
+    if (document.readyState === 'complete') go(); else window.addEventListener('load', go, { once: true });
+    return () => { clearTimeout(t); window.removeEventListener('load', go); };
+  }, []);
+
   // celebrate pose after a correct answer
   useEffect(() => {
     let t;
@@ -343,7 +470,16 @@ function App() {
   const toggleAudio = () => { const v = !audio; setAudioS(v); FX.on = v; if (v) FX.tap(); };
   const toggleCC = () => { FX.tap(); setCC(!cc); };
 
+  // "Play welcome" (shown only when the browser blocked autoplay): this click is the allowed user interaction
+  const playWelcome = () => {
+    narrator.unlock(); FX.unlock(); FX.on = audio; narrator.setAudio(audio);
+    FX.tap();
+    narrator.load(WELCOME_SEGS, 0); // scene 0 → audio/scene0-seg1.mp3, Web Speech fallback if the file is missing
+  };
+  // 'Skip intro': stop the welcome audio + mouth; the cover then shows the two course entry choices (it does not enter the lesson)
+  const skipIntro = () => { introOver.current = true; narrator.stop(); };
   const begin = (opts = {}) => {
+    narrator.stop(); // end the welcome narration (page 1 narration loads in the scene effect)
     narrator.unlock(); FX.unlock();
     if (opts.fresh) { setState({}); setSeen({}); setMaxSeg({}); setIdx(0); }
     narrator.setAudio(audio);
@@ -354,14 +490,17 @@ function App() {
   };
   const closeOnb = () => { saveSess({ onboarded: true }); setOnb(false); narrator.load(page.narration(state), sceneNo); };
 
-  if (!started) return <StartScreen onStart={begin} resumeIdx={saved && saved.idx > 0 ? saved.idx : 0} audio={audio} onAudio={toggleAudio} />;
+  if (!started) return (
+    <StartScreen onPlay={playWelcome} onSkip={skipIntro} onStart={begin} canContinue={hasSavedProgress(saved)}
+      audio={audio} onAudio={toggleAudio} cc={cc} onCC={toggleCC} ns={nsRaw.scene === 0 ? nsRaw : NS0} levelFn={levelFn} />
+  );
 
   const PageComp = page.Component;
   const playing = ns.status === 'playing';
   const live = ns.status === 'playing' || ns.status === 'paused';
   const segCount = ns.segCount || 1;
   const interactive = !!page.lockHint;
-  const pose = onb ? 'wave' : celebrate ? 'celebrate' : playing ? 'point' : (interactive && !complete) ? 'think' : 'point';
+  const pose = onb ? 'wave' : celebrate ? 'celebrate' : playing ? 'explain' : (interactive && !complete) ? 'think' : 'rest';
   return (
     <div className={'app' + (cc ? ' has-cc' : '')}>
       <header className="topbar">
@@ -405,7 +544,7 @@ function App() {
       {cc && (
         <div className="caption-bar" aria-live="polite">
           <span className="caption-k">CC</span>
-          <p>{live && ns.caption ? ns.caption : <span className="caption-idle">{ended ? 'Narration finished — tap a dot or Replay to hear it again.' : 'Captions will appear here while the teacher speaks.'}</span>}</p>
+          <p>{live && ns.caption ? ns.caption : <span className="caption-idle">{ended ? 'Narration finished — tap a dot or Replay to hear it again.' : 'Captions will appear here while Milo speaks.'}</span>}</p>
         </div>
       )}
 
@@ -429,31 +568,107 @@ function App() {
         </div>
         <div className="bb-badge-space" aria-hidden="true" />
       </footer>
-      <Teacher pose={pose} hl={live && !onb ? ns.hl : null} small={interactive} stageRef={stageRef} visible={!onb} />
+      <MiloGuide pose={pose} small={interactive} visible={!onb} speaking={!!ns.speaking && ns.status === 'playing'} levelFn={levelFn} cue={cue} />
+      <FloatingCursor key={idx} cue={cue} hidden={answering || onb} />
       {onb && <Onboarding onDone={closeOnb} />}
     </div>
   );
 }
 
-function StartScreen({ onStart, resumeIdx, audio, onAudio }) {
+/* ---------- Start screen: the approved ivory course cover ----------
+   Flow: cover loads → the welcome narration starts by itself (scene 0 → audio/scene0-seg1.mp3, Web Speech fallback if the file is
+   missing; silent timed text if Sound is off). "Skip intro" (text only) is available while it plays. The two course entry choices —
+   "Start new" and "Continue" — appear only when the welcome ends naturally or the learner clicks "Skip intro" (which stops the audio
+   and mouth but does NOT enter the lesson). Then "Skip intro" disappears; nothing replays and nothing is entered automatically.
+   "Continue" is enabled only when there is valid saved progress. If the browser refuses audible autoplay the narrator reports
+   'blocked': a "Play welcome" button is shown (one click plays the intro on this cover) and Milo's mouth stays still.
+   The script is split into PARTS only so Milo's gestures can follow the narration; captions show it whole. */
+const WELCOME_PARTS = [
+  'Hi, welcome to Build Your First AI Agent!',
+  'I’m Milo, your learning guide.',
+  'I’ll explain key ideas and guide you through the activities step by step.',
+  'Are you ready? Let’s start our learning journey together!',
+];
+const WELCOME_SEGS = [{ parts: WELCOME_PARTS.map(t => ({ t })) }];
+const WELCOME_TEXT = WELCOME_PARTS.join(' ');
+const WELCOME_GESTURES = ['wave', 'self', 'present', 'invite']; // Milo pose per narration part
+
+function CoverCards() {
+  const ink = '#1C2130';
   return (
-    <div className="start" data-screen-label="01 Start">
-      <div className="start-top"><CornerToggles audio={audio} onAudio={onAudio} showCC={false} /></div>
-      <div className="start-card">
-        <div className="start-k">Unit 1 · Module 1 · About 15 minutes</div>
-        <h1>Build Your First AI Agent</h1>
-        <ul className="start-lines">
-          <li><span className="sl-k">The course</span>Learn to tell a single LLM call, a fixed workflow, and an AI agent apart.</li>
-          <li><span className="sl-k">The scenario</span>Maya needs AI to help create visuals for Campus Sustainability Week.</li>
-          <li><span className="sl-k">You will</span>Listen to your teacher, then tap to decide who should determine what happens next.</li>
-        </ul>
-        <div className="start-actions">
-          <button type="button" className="startbtn tap" autoFocus data-track="start" onClick={() => onStart({})}>
-            Start <Icon name="right" size={22} sw={2.2} />
-          </button>
-          {resumeIdx > 0 && <button type="button" className="linkbtn tap start-over" data-track="start-over" onClick={() => onStart({ fresh: true })}>Start from the beginning instead</button>}
-        </div>
+    <div className="cv-cards" aria-hidden="true">
+      <div className="cv-card cv-card-1">
+        <svg viewBox="0 0 200 150"><path d="M100 18C148 14 188 36 186 70C184 104 148 126 106 124C96 124 86 123 78 120L42 140L54 110C32 98 16 82 18 62C20 34 54 20 100 18Z" fill="#5B9BD0" stroke={ink} strokeWidth="6" strokeLinejoin="round" /></svg>
       </div>
+      <div className="cv-card cv-card-2">
+        <svg viewBox="0 0 200 150"><g stroke={ink} strokeWidth="6" strokeLinejoin="round"><path d="M56 76H80M120 76H144" fill="none" strokeLinecap="round" />{[12, 78, 144].map((x, i) => <rect key={x} className={'cv-box cv-box-' + i} x={x} y="52" width="44" height="46" rx="9" fill="#FBB92D" />)}</g></svg>
+      </div>
+      <div className="cv-card cv-card-3">
+        <svg viewBox="0 0 200 150">
+          <g className="cv-loop" fill="none" stroke="#8B4A7B" strokeWidth="15" strokeLinecap="round">
+            <path d="M52 66A46 46 0 0 1 128 46" /><path d="M148 84A46 46 0 0 1 72 104" />
+            <path d="M118 22L136 50L106 56Z" fill="#8B4A7B" strokeWidth="6" strokeLinejoin="round" /><path d="M82 128L64 100L94 94Z" fill="#8B4A7B" strokeWidth="6" strokeLinejoin="round" />
+          </g>
+          <path className="cv-spark" d="M168 18Q172 34 190 38Q172 42 168 58Q164 42 146 38Q164 34 168 18Z" fill="#FBB92D" stroke={ink} strokeWidth="5" strokeLinejoin="round" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function StartScreen({ onPlay, onSkip, onStart, canContinue, audio, onAudio, cc, onCC, ns, levelFn }) {
+  const blocked = ns.status === 'blocked';
+  const ended = ns.status === 'ended';
+  const live = ns.status === 'playing' || ns.status === 'paused';
+  const [skipped, setSkipped] = useState(false);
+  const [done, setDone] = useState(false);   // welcome finished naturally (sticky)
+  const [hello, setHello] = useState(true);  // one small wave when the cover first appears
+  const primRef = useRef(null), playRef = useRef(null);
+  const choices = done || skipped;
+  useEffect(() => { const t = setTimeout(() => setHello(false), 2600); return () => clearTimeout(t); }, []);
+  useEffect(() => { if (ended) setDone(true); }, [ended]);
+  useEffect(() => { // keyboard users land on the next useful control without stealing focus from something they chose
+    const el = choices ? primRef.current : blocked ? playRef.current : null;
+    if (el && (!document.activeElement || document.activeElement === document.body)) el.focus();
+  }, [choices, blocked]);
+  const part = live ? (ns.part || 0) : 0;
+  const pose = live ? WELCOME_GESTURES[Math.min(part, WELCOME_GESTURES.length - 1)] : (done || skipped) ? 'idle' : hello ? 'wave' : 'idle';
+  const skip = () => { onSkip(); setSkipped(true); };
+  const startNew = <button ref={canContinue ? null : primRef} type="button" className={'cv-choice tap ' + (canContinue ? 'is-alt' : 'is-primary')} data-track="start-new" onClick={() => onStart({ fresh: true })}>Start new</button>;
+  const cont = <button ref={canContinue ? primRef : null} type="button" className={'cv-choice tap ' + (canContinue ? 'is-primary' : 'is-alt')} data-track="continue" disabled={!canContinue}
+    aria-describedby={canContinue ? undefined : 'cv-cont-note'} onClick={() => onStart({})}>Continue</button>;
+
+  return (
+    <div className="start cv" data-screen-label="01 Start">
+      <div className="cv-ring cv-ring-tl" aria-hidden="true" /><div className="cv-ring cv-ring-br" aria-hidden="true" />
+      <div className="start-top"><CornerToggles audio={audio} cc={cc} onAudio={onAudio} onCC={onCC} /></div>
+      <div className="cv-stage">
+        <svg className="cv-ticks" viewBox="0 0 1672 941" aria-hidden="true">
+          <g stroke="#EADFC6" strokeWidth="14" strokeLinecap="round"><path d="M84 355L128 380M150 322L158 348M70 412L108 408M1484 738L1472 770M1524 742L1530 774M1560 714L1584 736" /></g>
+        </svg>
+        <div className="cv-k">Unit 1 · Module 1 · About 15 minutes</div>
+        <h1>Build Your First AI Agent</h1>
+        <p className="cv-sub">Who decides what happens next?</p>
+        <Milo className="cv-milo" pose={pose} speaking={!!ns.speaking && ns.status === 'playing'} levelFn={levelFn} />
+        <CoverCards />
+        <div className="cv-bottom">
+          {choices ? (
+            <>
+              <div className={'cv-choices' + (done ? ' is-ready' : '')} role="group" aria-label="Course entry">{startNew}{cont}</div>
+              {!canContinue && <p id="cv-cont-note" className="cv-note">No saved progress yet</p>}
+            </>
+          ) : blocked ? (
+            <>
+              <button ref={playRef} type="button" className="cv-playbtn tap" data-track="play-welcome" onClick={onPlay} aria-label="Play welcome. Your browser blocked automatic sound.">
+                <Icon name="play" size={22} /> Play welcome
+              </button>
+              <p className="cv-note">Your browser blocked automatic sound — press play to hear Milo.</p>
+            </>
+          ) : null}
+        </div>
+        {!choices && <button type="button" className="cv-skip tap" data-track="skip-intro" onClick={skip}>Skip intro</button>}
+      </div>
+      {cc && <div className="caption-bar sx-cc" aria-live="polite"><span className="caption-k">CC</span><p>{WELCOME_TEXT}</p></div>}
     </div>
   );
 }

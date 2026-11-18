@@ -119,7 +119,7 @@ function Page2({ beat }) {
   const hl = beat >= 2 ? 0 : -1;
   return (
     <div className="page" data-screen-label="02 Orientation">
-      <PageHead kicker="Course and module" title="Build Your First AI Agent" hl="title" />
+      <PageHead kicker="Course and module" title="Build Your First AI Agent" hlr="coursemap" />
       <div className="stack" style={{ gap: 'clamp(18px, 3vh, 30px)' }}>
         <section data-hl="coursemap">
           <div className="label-mono" style={{ marginBottom: 10 }}>From a real work problem to an evaluated AI agent</div>
@@ -132,10 +132,10 @@ function Page2({ beat }) {
             ))}
           </div>
         </section>
-        <section style={{ opacity: showUnit ? 1 : .12, transition: 'opacity .6s' }}>
+        <section className={'p2-rv ' + (showUnit ? 'is-in' : '')} {...(showUnit ? {} : { inert: '' })}>
           <UnitMap highlight={hl} hl="unitmap" modHl="mod1" />
         </section>
-        <section className="goalcard" data-hl="goal" style={{ opacity: hl === 0 ? 1 : .12, transition: 'opacity .6s' }}>
+        <section className={'goalcard p2-rv ' + (hl === 0 ? 'is-in' : '')} data-hl="goal" {...(hl === 0 ? {} : { inert: '' })}>
           <span className="amark" style={{ background: '#2c3346', color: '#fff' }}><Icon name="model" size={22} /></span>
           <div>
             <div className="label-mono">Today's Goal</div>
@@ -150,8 +150,7 @@ PAGES.push({
   id: 'p2', phase: 0, title: 'Course and Module Orientation',
   narration: () => [
     { parts: [
-      { t: 'Welcome to Build Your First AI Agent.', hl: 'title' },
-      { t: 'In this course, you will begin with a real work problem and move through four stages:', hl: 'coursemap' },
+      { t: 'In this course, you will begin with a real work problem and move through four stages:', hl: 'coursemap' }, // the page title is revealed with this part (data-hlr below)
       { t: 'deciding where an agent is appropriate,', hl: 'st0' },
       { t: 'designing its architecture,', hl: 'st1' },
       { t: 'building a minimum prototype,', hl: 'st2' },

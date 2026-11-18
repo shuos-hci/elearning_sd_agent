@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local-only course tooling output / backups (not deployed)
+/design_handoff_module1_agent_lesson-4/backups/
+/design_handoff_module1_agent_lesson-4/tools/kokoro/node_modules/
+/design_handoff_module1_agent_lesson-4/tools/kokoro/out/
+/design_handoff_module1_agent_lesson-4/tools/kokoro/*.wav
+/design_handoff_module1_agent_lesson-4/tools/kokoro/*.log
+/design_handoff_module1_agent_lesson-4/local-build/node_modules/

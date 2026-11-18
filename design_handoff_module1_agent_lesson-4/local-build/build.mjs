@@ -1,4 +1,4 @@
-// Builds ../Module1-local.html : one self-contained file (React, compiled JSX, CSS, audio, teacher art all inlined).
+// Builds ../Module1-local.html : one self-contained file (React, compiled JSX, CSS, audio, Milo art all inlined).
 // Usage:  cd local-build && npm install && npm run build      (re-run after editing anything in ../frontend)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,25 +18,20 @@ const audio = {};
 for (const f of fs.readdirSync(audioDir).filter((f) => f.endsWith('.mp3')))
   audio[f.replace(/\.mp3$/, '')] = 'data:audio/mpeg;base64,' + b64(path.join(audioDir, f));
 const manifest = JSON.parse(read(path.join(audioDir, 'manifest.json')));
-const poses = {};
-for (const p of ['wave', 'point', 'think', 'celebrate'])
-  poses[p] = 'data:image/png;base64,' + b64(path.join(root, 'assets/teacher', p + '.png'));
+const milo = {};
+for (const p of ['base', 'arm-left', 'arm-right']) // Milo layers (frontend/milo.jsx reads window.__BYA_INLINE__.milo)
+  milo[p] = 'data:image/png;base64,' + b64(path.join(root, 'assets/milo', p + '.png'));
 
-const inlineData = `window.__BYA_INLINE__ = ${JSON.stringify({ audio, manifest, poses })};`;
+const inlineData = `window.__BYA_INLINE__ = ${JSON.stringify({ audio, manifest, milo })};`;
 
 // 2. compile JSX (same load order as frontend/index.html), patching asset lookups to the inline data
-const order = ['core', 'narrator', 'pages-a', 'pages-b', 'pages-c', 'app'];
+const order = ['core', 'milo', 'narrator', 'pages-a', 'pages-b', 'pages-c', 'app'];
 const compiled = order.map((n) => {
   let src = read(path.join(fe, n + '.jsx'));
   if (n === 'narrator') {
     src = src
       .replace(/fetch\(AUDIO_DIR \+ 'manifest\.json'.*\n/, "st.manifest = (window.__BYA_INLINE__ || {}).manifest || null;\n")
       .replace("const src = AUDIO_DIR + fileName(st.si) + '.mp3';", "const src = ((window.__BYA_INLINE__ || {}).audio || {})[fileName(st.si)] || (AUDIO_DIR + fileName(st.si) + '.mp3');");
-  }
-  if (n === 'app') {
-    src = src
-      .replace("src={`assets/teacher/${p}.png`}", "src={window.__BYA_INLINE__.poses[p]}")
-      .replace('src="assets/teacher/wave.png"', 'src={window.__BYA_INLINE__.poses.wave}');
   }
   return babel.transformSync(src, { presets: ['@babel/preset-react'], filename: n + '.jsx', compact: false }).code;
 });

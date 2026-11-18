@@ -332,9 +332,9 @@ function Summary({ title, items, kind, hl }) {
   );
 }
 
-function PageHead({ kicker, title, sub, hl, right }) {
+function PageHead({ kicker, title, sub, hl, hlr, right }) {
   return (
-    <header className="phead" data-hl={hl}>
+    <header className="phead" data-hl={hl} data-hlr={hlr}>
       <div>
         {kicker && <div className="kicker">{kicker}</div>}
         <h1 className="ptitle">{title}</h1>
