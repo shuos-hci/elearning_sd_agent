@@ -1057,15 +1057,6 @@ svg .stg:not(.is-in) { transform: none; }
 
 .narr-count { white-space: nowrap; min-width: 50px; }
 
-/* ---- learning mode selector: [Narration] [Caption Only] ---- */
-.modesw { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--bg2); border: 1.5px solid var(--line2); }
-.modesw-b { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 15px; border: none; border-radius: 999px; background: transparent; color: var(--ink2); font-family: var(--f-body); font-weight: 700; font-size: 14.5px; white-space: nowrap; cursor: pointer; }
-.modesw-b:hover:not(.is-on) { background: rgba(255,255,255,.75); color: var(--ink); }
-.modesw-b.is-on { background: var(--ink); color: #fff; }
-.start-mode { position: fixed; top: 16px; left: 20px; z-index: 6; }
-.start .modesw-b { min-height: 42px; font-size: 15.5px; }
-.start .modesw { background: #fff; border-color: var(--ink); box-shadow: 0 3px 0 rgba(28,33,48,.16); }
-
 /* ---- explanation panel: ONE complete paragraph + paragraph controls, identical in both modes ---- */
 .app { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 .xpanel { grid-row: 3; display: flex; align-items: stretch; gap: 20px; padding: 12px 28px 12px calc(28px + var(--tgut, 0px)); background: var(--card); border-top: 1px solid var(--line); }
@@ -1090,8 +1081,6 @@ svg .stg:not(.is-in) { transform: none; }
 .start .cv-stage { top: calc(50% - var(--rsv) / 2); }
 .xpanel.is-cover { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding-left: 28px; justify-content: center; min-height: 0; }
 .xpanel.is-cover .xp-text { flex: 0 1 1100px; min-height: calc(2 * 1.5 * 21px); }
-.cv-replay { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 14px; border: none; border-radius: 10px; background: transparent; color: var(--ink2); font-family: var(--f-body); font-weight: 700; font-size: 15px; cursor: pointer; }
-.cv-replay:hover { background: var(--bg2); color: var(--ink); }
 .cv-bottom { top: calc(790 * var(--u)); }
 /* small screens: natural wrapping and normal page scrolling (no scroll box inside the panel) */
 @media (max-width: 899px) {
@@ -1099,8 +1088,7 @@ svg .stg:not(.is-in) { transform: none; }
   .xp-text { min-height: 0; }
   .xp-text p { font-size: 19px; }
   .xp-ctl { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: center; }
-  .modesw-b { padding: 0 11px; font-size: 13.5px; }
-}
+  }
 @media (max-width: 760px) {
   html, body { height: auto; }
   .app { display: flex; flex-direction: column; height: auto; min-height: 100dvh; overflow: visible; }
@@ -1132,6 +1120,30 @@ svg .stg:not(.is-in) { transform: none; }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; margin: 0; opacity: .96; box-shadow: 0 14px 28px -10px rgba(28,33,48,.45); cursor: grabbing; }
 .mslot.is-over { border-color: var(--focus); background: oklch(0.96 0.03 200); box-shadow: 0 0 0 3px oklch(0.55 0.13 200 / .25); }
 
+/* ---- version selection (first screen) ---- */
+.vg { position: fixed; inset: 0; overflow: auto; background: var(--bg); color: var(--ink); display: grid; place-items: center; padding: 24px; }
+.vg-ring { position: fixed; border-radius: 50%; border: solid #F0E8D8; pointer-events: none; }
+.vg-ring-tl { width: 440px; height: 440px; left: -240px; top: -250px; border-width: 50px; }
+.vg-ring-br { width: 620px; height: 620px; right: -300px; bottom: -330px; border-width: 72px; }
+.vg-card { position: relative; width: min(760px, 100%); display: flex; flex-direction: column; align-items: center; gap: 34px; text-align: center; }
+.vg-card h1 { font-family: var(--f-head); font-weight: 800; font-size: clamp(30px, 4.2vw, 52px); line-height: 1.12; letter-spacing: -.02em; }
+.vg-opts { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+.vg-opt { display: inline-flex; align-items: center; justify-content: center; gap: 14px; min-width: 250px; min-height: 120px; padding: 0 34px; border: 3.5px solid var(--ink); border-radius: 26px; background: #FFFEFB; color: var(--ink); font-family: var(--f-head); font-weight: 800; font-size: 34px; box-shadow: 0 10px 14px rgba(214,198,166,.35); cursor: pointer; transition: background .15s, color .15s, transform .15s; }
+.vg-opt:hover:not(.is-on) { background: var(--bg2); }
+.vg-opt.is-on { background: var(--ink); color: #fff; }
+.vg-mark { width: 30px; height: 30px; border-radius: 50%; border: 3px solid currentColor; display: grid; place-items: center; flex: none; }
+.vg-go { min-height: 68px; min-width: 240px; padding: 0 40px; border: none; border-radius: 18px; background: var(--focus); color: #fff; font-family: var(--f-head); font-weight: 700; font-size: 26px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; cursor: pointer; box-shadow: 0 10px 24px -14px oklch(0.55 0.13 200 / .8); }
+.vg-go:hover:not(:disabled) { background: oklch(0.50 0.13 200); }
+.vg-go:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+.vg-note { margin: -14px 0 0; font-size: 15px; color: var(--ink2); }
+@media (max-width: 560px) { .vg-opt { min-width: 100%; min-height: 92px; font-size: 28px; } }
+
+/* Version A: Back / Continue only exist to repeat a part after the page has been heard — quiet secondary styling, not the main action */
+.xp-nav.is-review .xp-b { min-height: 38px; font-size: 14.5px; font-weight: 600; background: transparent; border-color: var(--line2); color: var(--ink2); }
+.xp-nav.is-review .xp-b.is-next { background: transparent; border-color: var(--line2); color: var(--ink2); }
+.xp-nav.is-review .xp-b:hover:not(:disabled) { background: var(--bg2); color: var(--ink); }
+.xp-nav.is-review .xp-count { font-size: 13px; }
+
 </style>
 </head>
 <body>
@@ -1151,6 +1163,8 @@ window.APP_CONFIG = {
    - Events are batched (fetch) and flushed with navigator.sendBeacon on page hide / unload.
    - If the backend is unreachable or not configured, events stay queued in localStorage and are retried silently.
    - Tracking must never break the lesson: every call is wrapped in try/catch.
+   A/B study: once the participant's version is known the lesson calls Track.setContext({ version, attempt_id }) and every later
+   event record carries `version` ('A' | 'B') and `attempt_id` (one id per course attempt; "Start new" creates a new one).
    Event types: session_start, lesson_complete, scene_enter, scene_exit, button_click, input,
                 click_anywhere, quiz_attempt, quiz_complete. */
 (function () {
@@ -1173,6 +1187,7 @@ window.APP_CONFIG = {
   if (!sid) { sid = uuid(); store(SID_KEY, sid); }
   var queue = load(Q_KEY, []);
   var scene = 0;
+  var ctx = { version: null, attempt_id: null }; // study context added to every event record
   var sending = false;
   var backoff = 4000;
 
@@ -1180,6 +1195,8 @@ window.APP_CONFIG = {
     try {
       ev.session_id = sid;
       ev.timestamp = new Date().toISOString();
+      if (ctx.version) ev.version = ctx.version;
+      if (ctx.attempt_id) ev.attempt_id = ctx.attempt_id;
       if (ev.scene == null) ev.scene = scene;
       queue.push(ev);
       if (queue.length > MAX_QUEUE) queue = queue.slice(queue.length - MAX_QUEUE);
@@ -1260,6 +1277,7 @@ window.APP_CONFIG = {
   var quizN = {};
   window.Track = {
     sessionId: sid,
+    setContext: function (c) { try { c = c || {}; ctx = { version: c.version === 'A' || c.version === 'B' ? c.version : null, attempt_id: c.attempt_id ? String(c.attempt_id).slice(0, 64) : null }; } catch (e) {} },
     event: function (type, data) {
       try {
         data = data || {};
@@ -6532,7 +6550,9 @@ function loadSaved() {
       seen: raw.seen,
       maxSeg: raw.maxSeg,
       para: obj(raw.para) ? raw.para : {},
-      rev: obj(raw.rev) ? raw.rev : {}
+      rev: obj(raw.rev) ? raw.rev : {},
+      version: raw.version === 'A' || raw.version === 'B' ? raw.version : null,
+      attempt: typeof raw.attempt === 'string' && raw.attempt ? raw.attempt : null
     }; // para = current explanation paragraph per page, rev = revealed-through segment per page
   } catch (e) {
     return null;
@@ -6609,18 +6629,16 @@ function useFitToStage(stageRef, fitRef, innerRef, key) {
   }, [key]);
 }
 
-/* ---------- Learning mode + caption preference (remembered across visits) ---------- */
-const PREF_KEY = 'bya-m1-prefs'; // { mode: 'narration' | 'caption', cc: boolean }  — CC defaults to on, then remembers the learner's choice
+/* ---------- Caption preference (Version A; remembered across visits). The version itself lives in the attempt record, see loadSaved ---------- */
+const PREF_KEY = 'bya-m1-prefs'; // { cc: boolean } — Version A only: captions default to on, then remember the learner's choice
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem(PREF_KEY));
     return {
-      mode: p && p.mode === 'caption' ? 'caption' : 'narration',
       cc: p && typeof p.cc === 'boolean' ? p.cc : true
     };
   } catch (e) {
     return {
-      mode: 'narration',
       cc: true
     };
   }
@@ -6667,41 +6685,78 @@ function buildParas(page, segs) {
   }));
 }
 
-/* ---------- Mode selector: [Narration] [Caption Only] ---------- */
-function ModeSwitch({
-  mode,
-  onMode,
-  className = ''
+/* ---------- Version selection (A/B study): shown once, before anything else — before any welcome narration ----------
+   Version A = narration (captions optional); Version B = silent reading with captions. Participant-facing text stays neutral:
+   only "Version A" / "Version B" are shown. The choice is locked for the attempt and saved with the progress. */
+function VersionGate({
+  onConfirm
 }) {
+  const [sel, setSel] = useState(null);
   const onKey = e => {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
-      const next = mode === 'narration' ? 'caption' : 'narration';
-      onMode(next);
-      const b = e.currentTarget.parentElement.querySelector(`[data-mode="${next}"]`);
+      const n = e.currentTarget.dataset.version === 'A' ? 'B' : 'A';
+      setSel(n);
+      const b = e.currentTarget.parentElement.querySelector(`[data-version="${n}"]`);
       b && b.focus();
     }
   };
   return /*#__PURE__*/React.createElement("div", {
-    className: 'modesw ' + className,
-    role: "group",
-    "aria-label": "Learning mode"
-  }, [['narration', 'Narration', 'vol'], ['caption', 'Caption Only', 'check']].map(([k, label]) => /*#__PURE__*/React.createElement("button", {
-    key: k,
+    className: "vg",
+    "data-screen-label": "00 Version"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "vg-ring vg-ring-tl",
+    "aria-hidden": "true"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "vg-ring vg-ring-br",
+    "aria-hidden": "true"
+  }), /*#__PURE__*/React.createElement("main", {
+    className: "vg-card"
+  }, /*#__PURE__*/React.createElement("h1", {
+    id: "vg-q"
+  }, "Please select the version assigned to you."), /*#__PURE__*/React.createElement("div", {
+    className: "vg-opts",
+    role: "radiogroup",
+    "aria-labelledby": "vg-q"
+  }, ['A', 'B'].map(v => /*#__PURE__*/React.createElement("button", {
+    key: v,
     type: "button",
-    "data-mode": k,
-    className: 'modesw-b' + (mode === k ? ' is-on' : ''),
-    "aria-pressed": mode === k,
-    "data-track": 'mode-' + k,
-    onClick: () => onMode(k),
+    role: "radio",
+    "aria-checked": sel === v,
+    "data-version": v,
+    "data-track": 'version-' + v,
+    tabIndex: sel === v || !sel && v === 'A' ? 0 : -1,
+    className: 'vg-opt tap' + (sel === v ? ' is-on' : ''),
+    onClick: () => setSel(v),
     onKeyDown: onKey,
-    title: k === 'narration' ? 'Milo explains aloud (captions optional)' : 'Silent: read each explanation'
-  }, mode === k && /*#__PURE__*/React.createElement(Icon, {
+    autoFocus: v === 'A'
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "vg-mark",
+    "aria-hidden": "true"
+  }, sel === v && /*#__PURE__*/React.createElement(Icon, {
     name: "check",
-    size: 14,
+    size: 18,
     sw: 3
-  }), label)));
+  })), "Version ", v))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "vg-go tap",
+    "data-track": "version-confirm",
+    disabled: !sel,
+    onClick: () => sel && onConfirm(sel)
+  }, "Continue ", /*#__PURE__*/React.createElement(Icon, {
+    name: "right",
+    size: 22,
+    sw: 2.2
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "vg-note"
+  }, "This choice is locked once you continue.")));
 }
+const newAttemptId = () => {
+  try {
+    if (crypto && crypto.randomUUID) return crypto.randomUUID();
+  } catch (e) {}
+  return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+};
 
 /* ---------- Explanation panel: one complete paragraph + paragraph controls (shared by both modes) ---------- */
 function ExplainPanel({
@@ -6711,6 +6766,8 @@ function ExplainPanel({
   texts,
   k,
   n,
+  showNav,
+  reviewStyle,
   onBack,
   onNext,
   playing,
@@ -6734,8 +6791,9 @@ function ExplainPanel({
     className: "xp-ctl",
     role: "group",
     "aria-label": "Explanation controls"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "xp-nav"
+  }, showNav && /*#__PURE__*/React.createElement("div", {
+    className: 'xp-nav' + (reviewStyle ? ' is-review' : ''),
+    "aria-label": reviewStyle ? 'Repeat a part of this page' : undefined
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "xp-b tap",
@@ -7340,10 +7398,11 @@ function OnbIllus({
   }, /*#__PURE__*/React.createElement("b", null, "CC")));
 }
 function Onboarding({
-  onDone
+  onDone,
+  version
 }) {
   const [step, setStep] = useState(0);
-  const steps = ['Listen to Milo — his cursor shows the part being explained.', 'Answer by tapping an option — Next unlocks when you finish.', 'Use Back and Continue under the lesson to move through each explanation. The switch at the top changes between Narration and Caption Only.'];
+  const steps = version === 'B' ? ['Read each explanation — Milo’s cursor shows the part being explained.', 'Answer by tapping an option — Next unlocks when you finish.', 'Use Back and Continue under the lesson to move through the explanations.'] : ['Listen to Milo — his cursor shows the part being explained.', 'Answer by tapping an option — Next unlocks when you finish.', 'Use Back and Continue under the lesson to move through each explanation. Use the icons at the top right for sound and captions.'];
   const finish = how => {
     FX.tap();
     track('button_click', {
@@ -7421,8 +7480,13 @@ function App() {
   const prefs0 = useMemo(loadPrefs, []);
   const narrator = useMemo(() => createNarrator(), []);
   const [started, setStarted] = useState(false);
-  const [mode, setMode] = useState(prefs0.mode); // 'narration' | 'caption' (remembered)
-  const modeRef = useRef(prefs0.mode);
+  // A/B study: the version is chosen once on the first screen, locked for the attempt and saved with the progress (never switchable)
+  const [version, setVersion] = useState(saved ? saved.version : null); // 'A' (narration + optional captions) | 'B' (silent, captions always shown) | null = not chosen yet
+  const [attemptId, setAttemptId] = useState(saved ? saved.attempt : null);
+  const versionRef = useRef(version);
+  versionRef.current = version;
+  const mode = version === 'B' ? 'caption' : 'narration'; // internal behaviour derived from the locked version
+  const modeRef = useRef(mode);
   modeRef.current = mode;
   const [cue, setCue] = useState(null); // {id, el, rect, gesture}: the target the teaching cursor points at
   const [answering, setAnswering] = useState(false); // the learner is answering → the cursor stays away until the next target
@@ -7463,18 +7527,29 @@ function App() {
       seen,
       maxSeg,
       para: paraMap,
-      rev: revMap
+      rev: revMap,
+      version,
+      attempt: attemptId
     }));
-  }, [idx, state, seen, maxSeg, paraMap, revMap]);
-  // Sound (session) + mode: Caption Only switches the narrator off completely (no audio, no speech, no timers, no click tones)
+  }, [idx, state, seen, maxSeg, paraMap, revMap, version, attemptId]);
+  useEffect(() => {
+    try {
+      window.Track && window.Track.setContext && window.Track.setContext({
+        version,
+        attempt_id: attemptId
+      });
+    } catch (e) {}
+  }, [version, attemptId]);
+  // Sound (session) + version: only Version A may ever make sound. Version B (and the version screen) keep the narrator off completely
+  // (no audio, no speech, no timers, no click tones)
   useEffect(() => {
     saveSess({
       audio
     });
-    FX.on = audio && mode === 'narration';
-    narrator.setEnabled(mode === 'narration');
+    FX.on = audio && version === 'A';
+    narrator.setEnabled(version === 'A');
     narrator.setAudio(audio);
-  }, [audio, mode]);
+  }, [audio, version]);
   useEffect(() => {
     savePrefs({
       cc
@@ -7496,6 +7571,18 @@ function App() {
   const live = mode === 'narration' && (ns.status === 'playing' || ns.status === 'paused');
   const playing = mode === 'narration' && ns.status === 'playing';
   const rev = revMap[page.id] ?? -1;
+  // Version A: the first listen flows through the whole page without stopping; Back / Continue appear only once the page has been heard,
+  // as a quiet way to repeat parts. Version B always shows them (they are its way of moving through the explanations).
+  const baseLast = (paras.filter(p => !p.fb).slice(-1)[0] || {
+    last: -1
+  }).last; // last narration segment of the page itself (feedback excluded)
+  const heardAll = rev >= baseLast && baseLast >= 0;
+  const showNav = mode === 'caption' || heardAll;
+  const revRef = useRef(rev);
+  revRef.current = rev;
+  const baseLastRef = useRef(baseLast);
+  baseLastRef.current = baseLast;
+  const playEnd = useRef(-1);
   // furthest reveal: live narration position, or everything through the last completed/skipped/entered paragraph
   const posSeg = live && ns.seg > rev ? ns.seg : rev,
     posPart = live && ns.seg > rev ? ns.part || 0 : Infinity;
@@ -7530,12 +7617,19 @@ function App() {
     });
   };
   // enter a paragraph: everything before it is revealed; Caption Only reveals all of it at once, Narration plays it and reveals as it is spoken
-  const startPara = (P, k) => {
+  const startPara = (P, k, opts = {}) => {
     const p = P[k];
     if (!p) return;
     if (p.first > 0) markRevealed(page.id, p.first - 1);
     setHold(null);
-    if (modeRef.current === 'caption') markRevealed(page.id, p.last);else narrator.playRange(p.first, p.last);
+    if (modeRef.current === 'caption') {
+      markRevealed(page.id, p.last);
+      return;
+    }
+    // continuous = the first listen: play from this paragraph straight through to the end of the page (no stop at paragraph ends)
+    const end = opts.continuous && !p.fb ? baseLastRef.current : p.last;
+    playEnd.current = end;
+    narrator.playRange(p.first, end);
   };
   const goPara = k => {
     const P = parasRef.current;
@@ -7561,7 +7655,17 @@ function App() {
     const t0 = Date.now();
     narrator.prepare(segs, sceneNo);
     setHold(null);
-    if (page.id === 'p2' && !loadSess().onboarded) setOnb(true);else startPara(paras, Math.max(0, Math.min(paras.length - 1, paraMap[page.id] || 0)));
+    if (page.id === 'p2' && !loadSess().onboarded) setOnb(true);else {
+      const done = revRef.current >= baseLastRef.current && baseLastRef.current >= 0;
+      const k0 = done ? 0 : Math.max(0, Math.min(paras.length - 1, paraMap[page.id] || 0));
+      if (done) setParaMap(m => ({
+        ...m,
+        [page.id]: 0
+      }));
+      startPara(paras, k0, {
+        continuous: true
+      });
+    }
     setSeen(s => ({
       ...s,
       [page.id]: true
@@ -7578,8 +7682,19 @@ function App() {
   // Narration: a paragraph that has finished playing is fully revealed and waits for Continue
   const rangeDone = mode === 'narration' && ns.status === 'ended' && !onb;
   useEffect(() => {
-    if (started && rangeDone && para) markRevealed(page.id, para.last); /* eslint-disable-next-line */
+    if (started && rangeDone) markRevealed(page.id, Math.max(playEnd.current, para ? para.last : -1)); /* eslint-disable-next-line */
   }, [rangeDone]);
+  // while the narration flows, the panel follows it paragraph by paragraph and everything already spoken stays revealed
+  const liveParaIdx = live ? paras.findIndex(p => ns.seg >= p.first && ns.seg <= p.last) : -1;
+  useEffect(() => {
+    if (started && liveParaIdx >= 0 && liveParaIdx !== paraIdx) setParaMap(m => ({
+      ...m,
+      [page.id]: liveParaIdx
+    })); /* eslint-disable-next-line */
+  }, [liveParaIdx]);
+  useEffect(() => {
+    if (started && live && ns.seg > 0) markRevealed(page.id, ns.seg - 1); /* eslint-disable-next-line */
+  }, [ns.seg, live]);
   // a feedback paragraph appears after the learner answers → move to it (the learner caused it)
   const prevLen = useRef({});
   useEffect(() => {
@@ -7691,13 +7806,13 @@ function App() {
   }, [started]);
 
   // Opening: as soon as the page is ready, try to play the welcome (Narration only; the browser may refuse audible autoplay → 'blocked')
-  const introOver = useRef(false); // set by 'Skip intro' / switching to Caption Only so a pending autoplay attempt can never start the welcome
+  const introOver = useRef(false); // set by 'Skip intro' so a pending autoplay attempt can never start the welcome afterwards
   useEffect(() => {
-    if (started) return;
+    if (started || version !== 'A') return;
     let t;
     const go = () => {
       t = setTimeout(() => {
-        if (!introOver.current && modeRef.current === 'narration') narrator.load(WELCOME_SEGS, 0);
+        if (!introOver.current && versionRef.current === 'A') narrator.load(WELCOME_SEGS, 0);
       }, 250);
     };
     if (document.readyState === 'complete') go();else window.addEventListener('load', go, {
@@ -7707,7 +7822,7 @@ function App() {
       clearTimeout(t);
       window.removeEventListener('load', go);
     };
-  }, []);
+  }, [version]);
 
   // celebrate pose after a correct answer
   useEffect(() => {
@@ -7793,38 +7908,51 @@ function App() {
   const toggleAudio = () => {
     const v = !audio;
     setAudioS(v);
-    FX.on = v && mode === 'narration';
+    FX.on = v && version === 'A';
     if (v) FX.tap();
   };
   const toggleCC = () => {
     FX.tap();
     setCC(!cc);
   };
-  // Mode switch (cover or lesson). Same page, paragraph, answers and revealed content; never reloads.
-  const changeMode = m => {
-    if (m === mode) return;
-    modeRef.current = m;
-    setMode(m);
-    savePrefs({
-      mode: m
-    });
-    if (m === 'caption') {
-      narrator.setEnabled(false);
-      FX.on = false; // stop everything NOW (audio, speech, mouth, timers)
-      introOver.current = true;
-      setHold(null);
-      if (started && para) markRevealed(page.id, para.last); // show the whole paragraph's content; wait for Continue
-    } else {
+  // First screen: the participant confirms the version assigned to them. Allowed exactly once; afterwards there is no way to change it.
+  // (An older saved attempt without a recorded version is also asked once here and never assigned silently.)
+  const chooseVersion = v => {
+    if (versionRef.current || v !== 'A' && v !== 'B') return;
+    const att = attemptId || newAttemptId();
+    versionRef.current = v;
+    try {
+      window.Track && window.Track.setContext && window.Track.setContext({
+        version: v,
+        attempt_id: att
+      });
+    } catch (e) {}
+    if (v === 'A') {
       narrator.setEnabled(true);
+      narrator.unlock();
+      FX.unlock();
       FX.on = audio;
-    } // Narration: nothing starts by itself — the learner presses Play
+      narrator.setAudio(audio);
+    } // this click is the gesture that lets the welcome autoplay
+    else {
+      narrator.setEnabled(false);
+      FX.on = false;
+    }
+    track('button_click', {
+      target: 'version-confirm',
+      value: v
+    });
+    setAttemptId(att);
+    setVersion(v);
   };
   const playPara = () => {
     if (para) {
       FX.tap();
       setHold(null);
       narrator.unlock();
-      narrator.playRange(para.first, para.last);
+      startPara(paras, paraIdx, {
+        continuous: !heardAll
+      });
     }
   };
   const pausePara = () => {
@@ -7857,6 +7985,15 @@ function App() {
     narrator.unlock();
     FX.unlock();
     if (opts.fresh) {
+      // a new attempt: same participant version, fresh progress and a new attempt id
+      const att = newAttemptId();
+      try {
+        window.Track && window.Track.setContext && window.Track.setContext({
+          version,
+          attempt_id: att
+        });
+      } catch (e) {}
+      setAttemptId(att);
       setState({});
       setSeen({});
       setMaxSeg({});
@@ -7865,7 +8002,7 @@ function App() {
       setIdx(0);
     }
     narrator.setAudio(audio);
-    FX.on = audio && mode === 'narration';
+    FX.on = audio && version === 'A';
     FX.tap();
     track('session_start', {});
     setStarted(true);
@@ -7875,8 +8012,13 @@ function App() {
       onboarded: true
     });
     setOnb(false);
-    startPara(paras, paraIdx);
+    startPara(paras, paraIdx, {
+      continuous: true
+    });
   };
+  if (!version) return /*#__PURE__*/React.createElement(VersionGate, {
+    onConfirm: chooseVersion
+  });
   if (!started) return /*#__PURE__*/React.createElement(StartScreen, {
     onPlay: playWelcome,
     onSkip: skipIntro,
@@ -7888,8 +8030,7 @@ function App() {
     onCC: toggleCC,
     ns: nsRaw.scene === 0 ? nsRaw : NS0,
     levelFn: levelFn,
-    mode: mode,
-    onMode: changeMode
+    mode: mode
   });
   const PageComp = page.Component;
   const interactive = !!page.lockHint;
@@ -7917,18 +8058,12 @@ function App() {
     sw: 3.2
   }) : i + 1), p))), /*#__PURE__*/React.createElement("div", {
     className: "tb-right"
-  }, /*#__PURE__*/React.createElement(ModeSwitch, {
-    mode: mode,
-    onMode: changeMode
-  }), mode === 'narration' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    className: "nsep",
-    "aria-hidden": "true"
-  }), /*#__PURE__*/React.createElement(CornerToggles, {
+  }, version === 'A' && /*#__PURE__*/React.createElement(CornerToggles, {
     audio: audio,
     cc: cc,
     onAudio: toggleAudio,
     onCC: toggleCC
-  })))), /*#__PURE__*/React.createElement("main", {
+  }))), /*#__PURE__*/React.createElement("main", {
     className: "stage",
     ref: stageRef,
     onClick: onStageClick
@@ -7954,6 +8089,8 @@ function App() {
     texts: paras.map(p => p.text),
     k: paraIdx,
     n: paras.length,
+    showNav: showNav,
+    reviewStyle: mode === 'narration',
     onBack: () => {
       FX.tap();
       goPara(paraIdx - 1);
@@ -8028,7 +8165,8 @@ function App() {
     cue: cue,
     hidden: answering || onb
   }), onb && /*#__PURE__*/React.createElement(Onboarding, {
-    onDone: closeOnb
+    onDone: closeOnb,
+    version: version
   }));
 }
 
@@ -8129,8 +8267,7 @@ function StartScreen({
   onCC,
   ns,
   levelFn,
-  mode,
-  onMode
+  mode
 }) {
   const caption = mode === 'caption'; // Caption Only: no welcome audio; the full text and both entry choices are shown immediately
   const blocked = ns.status === 'blocked';
@@ -8192,11 +8329,6 @@ function StartScreen({
     className: "cv-ring cv-ring-br",
     "aria-hidden": "true"
   }), /*#__PURE__*/React.createElement("div", {
-    className: "start-mode"
-  }, /*#__PURE__*/React.createElement(ModeSwitch, {
-    mode: mode,
-    onMode: onMode
-  })), /*#__PURE__*/React.createElement("div", {
     className: "start-top"
   }, !caption && /*#__PURE__*/React.createElement(CornerToggles, {
     audio: audio,
@@ -8226,15 +8358,7 @@ function StartScreen({
     levelFn: levelFn
   }), /*#__PURE__*/React.createElement(CoverCards, null), /*#__PURE__*/React.createElement("div", {
     className: "cv-bottom"
-  }, choices ? /*#__PURE__*/React.createElement(React.Fragment, null, !caption && !live && ns.status !== 'blocked' && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "cv-replay tap",
-    "data-track": "play-welcome",
-    onClick: onPlay
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "play",
-    size: 16
-  }), " Play welcome"), /*#__PURE__*/React.createElement("div", {
+  }, choices ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: 'cv-choices' + (done ? ' is-ready' : ''),
     role: "group",
     "aria-label": "Course entry"

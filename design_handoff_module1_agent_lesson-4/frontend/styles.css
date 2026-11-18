@@ -1050,15 +1050,6 @@ svg .stg:not(.is-in) { transform: none; }
 
 .narr-count { white-space: nowrap; min-width: 50px; }
 
-/* ---- learning mode selector: [Narration] [Caption Only] ---- */
-.modesw { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--bg2); border: 1.5px solid var(--line2); }
-.modesw-b { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 15px; border: none; border-radius: 999px; background: transparent; color: var(--ink2); font-family: var(--f-body); font-weight: 700; font-size: 14.5px; white-space: nowrap; cursor: pointer; }
-.modesw-b:hover:not(.is-on) { background: rgba(255,255,255,.75); color: var(--ink); }
-.modesw-b.is-on { background: var(--ink); color: #fff; }
-.start-mode { position: fixed; top: 16px; left: 20px; z-index: 6; }
-.start .modesw-b { min-height: 42px; font-size: 15.5px; }
-.start .modesw { background: #fff; border-color: var(--ink); box-shadow: 0 3px 0 rgba(28,33,48,.16); }
-
 /* ---- explanation panel: ONE complete paragraph + paragraph controls, identical in both modes ---- */
 .app { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 .xpanel { grid-row: 3; display: flex; align-items: stretch; gap: 20px; padding: 12px 28px 12px calc(28px + var(--tgut, 0px)); background: var(--card); border-top: 1px solid var(--line); }
@@ -1083,8 +1074,6 @@ svg .stg:not(.is-in) { transform: none; }
 .start .cv-stage { top: calc(50% - var(--rsv) / 2); }
 .xpanel.is-cover { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding-left: 28px; justify-content: center; min-height: 0; }
 .xpanel.is-cover .xp-text { flex: 0 1 1100px; min-height: calc(2 * 1.5 * 21px); }
-.cv-replay { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 14px; border: none; border-radius: 10px; background: transparent; color: var(--ink2); font-family: var(--f-body); font-weight: 700; font-size: 15px; cursor: pointer; }
-.cv-replay:hover { background: var(--bg2); color: var(--ink); }
 .cv-bottom { top: calc(790 * var(--u)); }
 /* small screens: natural wrapping and normal page scrolling (no scroll box inside the panel) */
 @media (max-width: 899px) {
@@ -1092,8 +1081,7 @@ svg .stg:not(.is-in) { transform: none; }
   .xp-text { min-height: 0; }
   .xp-text p { font-size: 19px; }
   .xp-ctl { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: center; }
-  .modesw-b { padding: 0 11px; font-size: 13.5px; }
-}
+  }
 @media (max-width: 760px) {
   html, body { height: auto; }
   .app { display: flex; flex-direction: column; height: auto; min-height: 100dvh; overflow: visible; }
@@ -1124,3 +1112,27 @@ svg .stg:not(.is-in) { transform: none; }
 .tray-badge.is-dragging { opacity: .35; }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; margin: 0; opacity: .96; box-shadow: 0 14px 28px -10px rgba(28,33,48,.45); cursor: grabbing; }
 .mslot.is-over { border-color: var(--focus); background: oklch(0.96 0.03 200); box-shadow: 0 0 0 3px oklch(0.55 0.13 200 / .25); }
+
+/* ---- version selection (first screen) ---- */
+.vg { position: fixed; inset: 0; overflow: auto; background: var(--bg); color: var(--ink); display: grid; place-items: center; padding: 24px; }
+.vg-ring { position: fixed; border-radius: 50%; border: solid #F0E8D8; pointer-events: none; }
+.vg-ring-tl { width: 440px; height: 440px; left: -240px; top: -250px; border-width: 50px; }
+.vg-ring-br { width: 620px; height: 620px; right: -300px; bottom: -330px; border-width: 72px; }
+.vg-card { position: relative; width: min(760px, 100%); display: flex; flex-direction: column; align-items: center; gap: 34px; text-align: center; }
+.vg-card h1 { font-family: var(--f-head); font-weight: 800; font-size: clamp(30px, 4.2vw, 52px); line-height: 1.12; letter-spacing: -.02em; }
+.vg-opts { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+.vg-opt { display: inline-flex; align-items: center; justify-content: center; gap: 14px; min-width: 250px; min-height: 120px; padding: 0 34px; border: 3.5px solid var(--ink); border-radius: 26px; background: #FFFEFB; color: var(--ink); font-family: var(--f-head); font-weight: 800; font-size: 34px; box-shadow: 0 10px 14px rgba(214,198,166,.35); cursor: pointer; transition: background .15s, color .15s, transform .15s; }
+.vg-opt:hover:not(.is-on) { background: var(--bg2); }
+.vg-opt.is-on { background: var(--ink); color: #fff; }
+.vg-mark { width: 30px; height: 30px; border-radius: 50%; border: 3px solid currentColor; display: grid; place-items: center; flex: none; }
+.vg-go { min-height: 68px; min-width: 240px; padding: 0 40px; border: none; border-radius: 18px; background: var(--focus); color: #fff; font-family: var(--f-head); font-weight: 700; font-size: 26px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; cursor: pointer; box-shadow: 0 10px 24px -14px oklch(0.55 0.13 200 / .8); }
+.vg-go:hover:not(:disabled) { background: oklch(0.50 0.13 200); }
+.vg-go:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+.vg-note { margin: -14px 0 0; font-size: 15px; color: var(--ink2); }
+@media (max-width: 560px) { .vg-opt { min-width: 100%; min-height: 92px; font-size: 28px; } }
+
+/* Version A: Back / Continue only exist to repeat a part after the page has been heard — quiet secondary styling, not the main action */
+.xp-nav.is-review .xp-b { min-height: 38px; font-size: 14.5px; font-weight: 600; background: transparent; border-color: var(--line2); color: var(--ink2); }
+.xp-nav.is-review .xp-b.is-next { background: transparent; border-color: var(--line2); color: var(--ink2); }
+.xp-nav.is-review .xp-b:hover:not(:disabled) { background: var(--bg2); color: var(--ink); }
+.xp-nav.is-review .xp-count { font-size: 13px; }

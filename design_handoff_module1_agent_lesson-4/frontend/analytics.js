@@ -3,6 +3,8 @@
    - Events are batched (fetch) and flushed with navigator.sendBeacon on page hide / unload.
    - If the backend is unreachable or not configured, events stay queued in localStorage and are retried silently.
    - Tracking must never break the lesson: every call is wrapped in try/catch.
+   A/B study: once the participant's version is known the lesson calls Track.setContext({ version, attempt_id }) and every later
+   event record carries `version` ('A' | 'B') and `attempt_id` (one id per course attempt; "Start new" creates a new one).
    Event types: session_start, lesson_complete, scene_enter, scene_exit, button_click, input,
                 click_anywhere, quiz_attempt, quiz_complete. */
 (function () {
@@ -25,6 +27,7 @@
   if (!sid) { sid = uuid(); store(SID_KEY, sid); }
   var queue = load(Q_KEY, []);
   var scene = 0;
+  var ctx = { version: null, attempt_id: null }; // study context added to every event record
   var sending = false;
   var backoff = 4000;
 
@@ -32,6 +35,8 @@
     try {
       ev.session_id = sid;
       ev.timestamp = new Date().toISOString();
+      if (ctx.version) ev.version = ctx.version;
+      if (ctx.attempt_id) ev.attempt_id = ctx.attempt_id;
       if (ev.scene == null) ev.scene = scene;
       queue.push(ev);
       if (queue.length > MAX_QUEUE) queue = queue.slice(queue.length - MAX_QUEUE);
@@ -112,6 +117,7 @@
   var quizN = {};
   window.Track = {
     sessionId: sid,
+    setContext: function (c) { try { c = c || {}; ctx = { version: c.version === 'A' || c.version === 'B' ? c.version : null, attempt_id: c.attempt_id ? String(c.attempt_id).slice(0, 64) : null }; } catch (e) {} },
     event: function (type, data) {
       try {
         data = data || {};
