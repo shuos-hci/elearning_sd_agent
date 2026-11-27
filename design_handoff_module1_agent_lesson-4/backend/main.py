@@ -3,7 +3,7 @@
 Endpoints
   POST /api/events        batch of events (JSON array). Always 200; bad events are skipped.
   GET  /api/summary       dashboard numbers (JSON)            — password required
-  GET  /api/export.xlsx   Excel workbook: sessions, events, summary  — password required
+  GET  /api/export.xlsx   Excel workbook: summary_A/B, sessions_A/B, events_A/B  — password required
   GET  /analytics         dashboard page (password gate in the page)
   GET  /healthz           health check
 
@@ -123,14 +123,18 @@ async def ingest(request: Request, s=Depends(db)):
             if not sid or et not in EVENT_TYPES:
                 skipped += 1; continue
             ts = _parse_ts(ev.get("timestamp"))
+            ver = _s(ev.get("version"), 2)
+            ver = ver if ver in ("A", "B") else None  # A/B study version; anything else is treated as unknown
             sess = s.get(Session, sid)
             if sess is None:
-                sess = Session(session_id=sid, started_at=ts, completed=False)
+                sess = Session(session_id=sid, started_at=ts, completed=False, version=ver)
                 s.add(sess)
             if ts < sess.started_at:
                 sess.started_at = ts
             if sess.ended_at is None or ts > sess.ended_at:
                 sess.ended_at = ts
+            if sess.version is None and ver:
+                sess.version = ver
             if et == "lesson_complete":
                 sess.completed = True
             correct = ev.get("correct")
@@ -138,7 +142,7 @@ async def ingest(request: Request, s=Depends(db)):
                 session_id=sid, scene=_int(ev.get("scene")), event_type=et,
                 target=_s(ev.get("target"), 255), value=_s(ev.get("value"), 4000),
                 x=_num(ev.get("x")), y=_num(ev.get("y")), attempt_no=_int(ev.get("attempt_no")),
-                correct=None if correct is None else bool(correct), timestamp=ts,
+                correct=None if correct is None else bool(correct), version=ver, timestamp=ts,
             ))
             s.flush()
             accepted += 1
@@ -154,9 +158,13 @@ async def ingest(request: Request, s=Depends(db)):
 
 
 # ------------------------------------------------------------------ summary
-def compute_summary(s) -> dict:
-    sessions = s.query(Session).all()
-    events = s.query(Event).order_by(Event.timestamp).all()
+def compute_summary(s, version: Optional[str] = None) -> dict:
+    q = s.query(Session)
+    if version:
+        q = q.filter(Session.version == version)
+    sessions = q.all()
+    sess_ids = {x.session_id for x in sessions}
+    events = [e for e in s.query(Event).order_by(Event.timestamp).all() if e.session_id in sess_ids]
     n = len(sessions)
     completed = [x for x in sessions if x.completed]
 
@@ -284,17 +292,12 @@ def _sheet(ws, headers, rows, widths=None):
         ws.column_dimensions[get_column_letter(i)].width = (widths or {}).get(h, max(12, min(40, len(h) + 6)))
 
 
-@app.get("/api/export.xlsx")
-def export_xlsx(_=Depends(require_password), s=Depends(db)):
-    wb = Workbook()
-    sm = compute_summary(s)
-    notes = trend_notes(sm)
-
-    ws = wb.active; ws.title = "summary"
-    ws["A1"] = "WASA-4 Module 1 — learning analytics summary"; ws["A1"].font = Font(bold=True, size=14)
+def _write_summary_sheet(ws, version, sm, notes):
+    """One summary sheet for a single A/B version — same layout as the old overall summary."""
+    ws["A1"] = f"WASA-4 Module 1 — learning analytics summary (Version {version})"; ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = f"Exported {datetime.utcnow().isoformat(timespec='minutes')} UTC"
     r = 4
-    for k, v in [("Sessions", sm["total_sessions"]), ("Completed sessions", sm["completed_sessions"]),
+    for k, v in [("Version", version), ("Sessions", sm["total_sessions"]), ("Completed sessions", sm["completed_sessions"]),
                  ("Completion rate", f"{round(sm['completion_rate'] * 100, 1)}%"),
                  ("Average lesson time (min, completers)", sm["avg_lesson_minutes"]),
                  ("Clicks on non-interactive areas", sm["noninteractive_clicks"]), ("Total events", sm["total_events"])]:
@@ -323,14 +326,30 @@ def export_xlsx(_=Depends(require_password), s=Depends(db)):
     for c in "BCDE":
         ws.column_dimensions[c].width = 22
 
-    _sheet(wb.create_sheet("sessions"), ["session_id", "started_at", "ended_at", "completed"],
-           [[x.session_id, x.started_at, x.ended_at, x.completed] for x in s.query(Session).order_by(Session.started_at)],
-           {"session_id": 40, "started_at": 22, "ended_at": 22})
-    _sheet(wb.create_sheet("events"),
-           ["id", "session_id", "scene", "event_type", "target", "value", "x", "y", "attempt_no", "correct", "timestamp"],
-           [[e.id, e.session_id, e.scene, e.event_type, e.target, e.value, e.x, e.y, e.attempt_no, e.correct, e.timestamp]
-            for e in s.query(Event).order_by(Event.id)],
-           {"session_id": 40, "target": 36, "value": 50, "timestamp": 22, "event_type": 16})
+@app.get("/api/export.xlsx")
+def export_xlsx(_=Depends(require_password), s=Depends(db)):
+    wb = Workbook()
+    # Summary, sessions and events are each split by A/B version so the two
+    # arms can be compared directly. Sessions/events without a version
+    # (recorded before the version field existed) appear in neither sheet.
+    for version in ("A", "B"):
+        sm = compute_summary(s, version)
+        ws = wb.active if version == "A" else wb.create_sheet(f"summary_{version}")
+        if version == "A":
+            ws.title = "summary_A"
+        _write_summary_sheet(ws, version, sm, trend_notes(sm))
+
+    for version in ("A", "B"):
+        sessions_v = s.query(Session).filter(Session.version == version).order_by(Session.started_at).all()
+        ids = [x.session_id for x in sessions_v]
+        _sheet(wb.create_sheet(f"sessions_{version}"), ["session_id", "started_at", "ended_at", "completed", "version"],
+               [[x.session_id, x.started_at, x.ended_at, x.completed, x.version] for x in sessions_v],
+               {"session_id": 40, "started_at": 22, "ended_at": 22})
+        _sheet(wb.create_sheet(f"events_{version}"),
+               ["id", "session_id", "version", "scene", "event_type", "target", "value", "x", "y", "attempt_no", "correct", "timestamp"],
+               [[e.id, e.session_id, e.version, e.scene, e.event_type, e.target, e.value, e.x, e.y, e.attempt_no, e.correct, e.timestamp]
+                for e in s.query(Event).filter(Event.session_id.in_(ids)).order_by(Event.id)],
+               {"session_id": 40, "target": 36, "value": 50, "timestamp": 22, "event_type": 16})
 
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     name = f"wasa4-analytics-{datetime.utcnow():%Y%m%d-%H%M}.xlsx"

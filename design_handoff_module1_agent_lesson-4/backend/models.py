@@ -31,6 +31,7 @@ class Session(Base):
     started_at = Column(DateTime, default=utcnow, nullable=False)
     ended_at = Column(DateTime, nullable=True)
     completed = Column(Boolean, default=False, nullable=False)
+    version = Column(String(2), nullable=True)  # A/B study: 'A' (narration) or 'B' (on-screen text)
 
 
 class Event(Base):
@@ -45,8 +46,30 @@ class Event(Base):
     y = Column(Float, nullable=True)
     attempt_no = Column(Integer, nullable=True)
     correct = Column(Boolean, nullable=True)
+    version = Column(String(2), nullable=True, index=True)  # A/B study: 'A' or 'B', copied from the event payload
     timestamp = Column(DateTime, default=utcnow, index=True, nullable=False)
 
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    _ensure_version_columns()
+
+
+def _ensure_version_columns():
+    """Add the version column to tables created before it existed.
+
+    create_all() never alters an existing table, so a local analytics.db
+    from before this change would otherwise reject every insert. On Render
+    the SQLite file is wiped on redeploy, so this is a no-op there — it only
+    matters for a pre-existing local database.
+    """
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    for table in ("sessions", "events"):
+        try:
+            cols = [c["name"] for c in insp.get_columns(table)]
+        except Exception:
+            continue
+        if "version" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN version VARCHAR(2)"))
